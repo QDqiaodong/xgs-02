@@ -1,0 +1,199 @@
+package com.recipe.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.recipe.dto.RecipeDTO;
+import com.recipe.entity.Recipe;
+import com.recipe.mapper.RecipeMapper;
+import com.recipe.service.RecipeService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class RecipeServiceImpl implements RecipeService {
+
+    private final RecipeMapper recipeMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Value("${recipe.cache.hot-recipe-key:recipe:hot:monthly}")
+    private String hotRecipeKey;
+
+    @Value("${recipe.cache.hot-recipe-expire:86400}")
+    private Long hotRecipeExpire;
+
+    @Override
+    public List<Recipe> getHotRecipes() {
+        Set<ZSetOperations.TypedTuple<Object>> cached = redisTemplate.opsForZSet()
+                .reverseRangeWithScores(hotRecipeKey, 0, 9);
+
+        if (cached != null && !cached.isEmpty()) {
+            return cached.stream()
+                    .map(tuple -> {
+                        try {
+                            return objectMapper.convertValue(tuple.getValue(), Recipe.class);
+                        } catch (Exception e) {
+                            return null;
+                        }
+                    })
+                    .filter(r -> r != null)
+                    .toList();
+        }
+
+        List<Recipe> recipes = recipeMapper.selectHotRecipes(10);
+        cacheHotRecipes(recipes);
+        return recipes;
+    }
+
+    private void cacheHotRecipes(List<Recipe> recipes) {
+        recipes.forEach(recipe -> {
+            redisTemplate.opsForZSet().add(hotRecipeKey, recipe, recipe.getFavoriteCount());
+        });
+        redisTemplate.expire(hotRecipeKey, hotRecipeExpire, TimeUnit.SECONDS);
+    }
+
+    @Scheduled(cron = "0 0 2 * * ?")
+    public void refreshHotRecipes() {
+        log.info("开始刷新热门菜谱缓存...");
+        List<Recipe> recipes = recipeMapper.selectHotRecipes(10);
+        redisTemplate.delete(hotRecipeKey);
+        cacheHotRecipes(recipes);
+        log.info("热门菜谱缓存刷新完成");
+    }
+
+    @Override
+    public Page<Recipe> getRecipePage(Integer page, Integer size, String keyword, String cuisine, String scene, Integer difficulty) {
+        LambdaQueryWrapper<Recipe> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Recipe::getStatus, 1)
+                .eq(Recipe::getIsDraft, 0)
+                .eq(Recipe::getDeleted, 0);
+
+        if (keyword != null && !keyword.isEmpty()) {
+            wrapper.like(Recipe::getTitle, keyword)
+                    .or()
+                    .like(Recipe::getDescription, keyword);
+        }
+
+        if (cuisine != null && !cuisine.isEmpty()) {
+            wrapper.like(Recipe::getTags, cuisine);
+        }
+
+        if (difficulty != null) {
+            wrapper.eq(Recipe::getDifficulty, difficulty);
+        }
+
+        wrapper.orderByDesc(Recipe::getFavoriteCount);
+
+        return recipeMapper.selectPage(new Page<>(page, size), wrapper);
+    }
+
+    @Override
+    public Recipe getRecipeDetail(Long id) {
+        Recipe recipe = recipeMapper.selectById(id);
+        if (recipe != null) {
+            recipe.setViewCount(recipe.getViewCount() == null ? 1 : recipe.getViewCount() + 1);
+            recipeMapper.updateById(recipe);
+        }
+        return recipe;
+    }
+
+    @Override
+    @Transactional
+    public Recipe createRecipe(RecipeDTO dto) {
+        Recipe recipe = convertToEntity(dto);
+        recipe.setIsDraft(0);
+        recipe.setStatus(1);
+        recipe.setFavoriteCount(0);
+        recipe.setViewCount(0);
+        recipeMapper.insert(recipe);
+        return recipe;
+    }
+
+    @Override
+    @Transactional
+    public Recipe updateRecipe(Long id, RecipeDTO dto) {
+        Recipe recipe = convertToEntity(dto);
+        recipe.setId(id);
+        recipeMapper.updateById(recipe);
+        return recipe;
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteRecipe(Long id) {
+        return recipeMapper.deleteById(id) > 0;
+    }
+
+    @Override
+    @Transactional
+    public Recipe saveDraft(RecipeDTO dto) {
+        Recipe recipe = convertToEntity(dto);
+        recipe.setIsDraft(1);
+        recipe.setStatus(0);
+        if (recipe.getFavoriteCount() == null) recipe.setFavoriteCount(0);
+        if (recipe.getViewCount() == null) recipe.setViewCount(0);
+        recipeMapper.insert(recipe);
+        return recipe;
+    }
+
+    @Override
+    public List<Recipe> getDrafts() {
+        LambdaQueryWrapper<Recipe> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Recipe::getIsDraft, 1)
+                .eq(Recipe::getDeleted, 0)
+                .orderByDesc(Recipe::getUpdatedAt);
+        return recipeMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<Recipe> getUserRecipes() {
+        LambdaQueryWrapper<Recipe> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Recipe::getIsDraft, 0)
+                .eq(Recipe::getStatus, 1)
+                .eq(Recipe::getDeleted, 0)
+                .orderByDesc(Recipe::getCreatedAt);
+        return recipeMapper.selectList(wrapper);
+    }
+
+    private Recipe convertToEntity(RecipeDTO dto) {
+        Recipe recipe = new Recipe();
+        recipe.setTitle(dto.getTitle());
+        recipe.setDescription(dto.getDescription());
+        recipe.setCoverImage(dto.getCoverImage());
+        recipe.setAuthor(dto.getAuthor());
+        recipe.setCookTime(dto.getCookTime());
+        recipe.setDifficulty(dto.getDifficulty());
+        
+        if (dto.getTags() != null) {
+            recipe.setTags(String.join(",", dto.getTags()));
+        }
+        
+        try {
+            if (dto.getIngredients() != null) {
+                recipe.setIngredients(objectMapper.writeValueAsString(dto.getIngredients()));
+            }
+            if (dto.getSteps() != null) {
+                recipe.setSteps(objectMapper.writeValueAsString(dto.getSteps()));
+            }
+        } catch (Exception e) {
+            log.error("JSON序列化失败", e);
+        }
+        
+        recipe.setTips(dto.getTips());
+        return recipe;
+    }
+}

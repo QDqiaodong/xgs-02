@@ -1,0 +1,109 @@
+version: '3.8'
+
+x-common-config: &common-config
+  restart: unless-stopped
+
+services:
+  mysql:
+    <<: *common-config
+    image: ${DOCKER_REGISTRY}/library/mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME}-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: ${TZ}
+    ports:
+      - "${MYSQL_PORT}:${MYSQL_INTERNAL_PORT}"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    <<: *common-config
+    image: ${DOCKER_REGISTRY}/library/redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
+    ports:
+      - "${REDIS_PORT}:${REDIS_INTERNAL_PORT}"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    <<: *common-config
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        DOCKER_REGISTRY: ${DOCKER_REGISTRY}
+    container_name: ${COMPOSE_PROJECT_NAME}-backend
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_INTERNAL_PORT}"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - recipe-images:/app/images
+    networks:
+      - app-network
+    environment:
+      SERVER_PORT: ${BACKEND_INTERNAL_PORT}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:${MYSQL_INTERNAL_PORT}/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: ${REDIS_INTERNAL_PORT}
+      RECIPE_IMAGE_PATH: /app/images
+      RECIPE_IMAGE_URL_PREFIX: http://localhost:${BACKEND_PORT}/api/images
+      TZ: ${TZ}
+
+  frontend:
+    <<: *common-config
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        DOCKER_REGISTRY: ${DOCKER_REGISTRY}
+    container_name: ${COMPOSE_PROJECT_NAME}-frontend
+    ports:
+      - "${FRONTEND_PORT}:${NGINX_INTERNAL_PORT}"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    environment:
+      TZ: ${TZ}
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
+  recipe-images:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.2.0/24
