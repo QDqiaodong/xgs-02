@@ -76,18 +76,21 @@
       </div>
 
       <div class="sort-bar">
-        <span>共 {{ recipes.length }} 道菜谱</span>
-        <div class="sort-options">
-          <span 
-            class="sort-option" 
-            :class="{ active: sortBy === 'hot' }"
-            @click="sortBy = 'hot'"
-          >最热门</span>
-          <span 
-            class="sort-option" 
-            :class="{ active: sortBy === 'new' }"
-            @click="sortBy = 'new'"
-          >最新发布</span>
+        <span>共 {{ allFilteredRecipes.length }} 道菜谱</span>
+        <div class="sort-bar-right">
+          <div class="sort-options">
+            <span 
+              class="sort-option" 
+              :class="{ active: sortBy === 'hot' }"
+              @click="handleSortChange('hot')"
+            >最热门</span>
+            <span 
+              class="sort-option" 
+              :class="{ active: sortBy === 'new' }"
+              @click="handleSortChange('new')"
+            >最新发布</span>
+          </div>
+          <LayoutSwitcher :layout="layout" @change="handleLayoutChange" />
         </div>
       </div>
 
@@ -95,18 +98,27 @@
         <div class="spinner"></div>
       </div>
 
-      <div v-else-if="filteredRecipes.length === 0" class="empty-state">
+      <div v-else-if="displayRecipes.length === 0" class="empty-state">
         <div class="empty-icon">🍳</div>
         <h3>暂无符合条件的菜谱</h3>
         <p>试试调整筛选条件，或者发布第一道菜谱吧</p>
         <router-link to="/create" class="btn btn-primary">发布菜谱</router-link>
       </div>
 
-      <div v-else class="recipe-grid">
-        <RecipeCard v-for="recipe in filteredRecipes" :key="recipe.id" :recipe="recipe" />
+      <template v-else>
+        <div v-if="layout === 'grid'" class="recipe-grid">
+          <RecipeCard v-for="recipe in displayRecipes" :key="recipe.id" :recipe="recipe" mode="grid" />
+        </div>
+        <Waterfall v-else :items="displayRecipes" :columns="4" v-slot="{ item }">
+          <RecipeCard :recipe="item" mode="waterfall" />
+        </Waterfall>
+      </template>
+
+      <div v-if="loadingMore" class="loading loading-more-inline">
+        <div class="spinner"></div>
       </div>
 
-      <div v-if="filteredRecipes.length > 0" class="load-more">
+      <div v-if="!loadingMore && displayRecipes.length > 0 && hasMore" class="load-more">
         <button class="btn btn-outline" @click="loadMore">加载更多</button>
       </div>
     </div>
@@ -114,14 +126,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import RecipeCard from '@/components/RecipeCard.vue'
+import LayoutSwitcher from '@/components/LayoutSwitcher.vue'
+import Waterfall from '@/components/Waterfall.vue'
 
 const route = useRoute()
 
 const loading = ref(true)
+const loadingMore = ref(false)
 const sortBy = ref('hot')
+const layout = ref('grid')
+const pageSize = 4
+const currentPage = ref(1)
+
 const filters = ref({
   cuisine: '',
   scene: '',
@@ -137,21 +156,23 @@ const difficulties = [
   { value: '3', label: '困难' }
 ]
 
-const allRecipes = [
+const allRecipes = ref([
   { id: 1, title: '红烧五花肉', description: '经典家常菜，肥而不腻，入口即化', coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=400&h=300&fit=crop', difficulty: 2, cookTime: 60, tags: ['川菜', '家常菜', '晚餐'], author: '美食达人', favoriteCount: 1286, createdAt: '2024-01-15' },
-  { id: 2, title: '番茄炒蛋', description: '最简单也最困难的国民家常菜', coverImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop', difficulty: 1, cookTime: 15, tags: ['家常菜', '快手菜', '午餐'], author: '小厨神', favoriteCount: 2341, createdAt: '2024-01-18' },
-  { id: 3, title: '宫保鸡丁', description: '川菜经典，鸡肉滑嫩，花生酥脆', coverImage: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?w=400&h=300&fit=crop', difficulty: 2, cookTime: 30, tags: ['川菜', '经典', '晚餐'], author: '川菜大师', favoriteCount: 1892, createdAt: '2024-01-10' },
-  { id: 4, title: '清蒸鲈鱼', description: '粤式蒸鱼，鲜嫩爽滑，原汁原味', coverImage: 'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=400&h=300&fit=crop', difficulty: 2, cookTime: 25, tags: ['粤菜', '海鲜', '宴请'], author: '粤菜名厨', favoriteCount: 1567, createdAt: '2024-01-12' },
-  { id: 5, title: '麻婆豆腐', description: '麻辣鲜香，下饭神器', coverImage: 'https://images.unsplash.com/photo-1582576163090-09d3b6f8a969?w=400&h=300&fit=crop', difficulty: 1, cookTime: 20, tags: ['川菜', '家常菜', '午餐'], author: '四川厨子', favoriteCount: 2103, createdAt: '2024-01-20' },
-  { id: 6, title: '白切鸡', description: '粤菜经典，皮爽肉滑', coverImage: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400&h=300&fit=crop', difficulty: 2, cookTime: 45, tags: ['粤菜', '经典', '宴请'], author: '广东阿婆', favoriteCount: 1456, createdAt: '2024-01-08' },
-  { id: 7, title: '糖醋排骨', description: '酸甜可口，老少皆宜', coverImage: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=300&fit=crop', difficulty: 2, cookTime: 40, tags: ['家常菜', '浙菜', '晚餐'], author: '巧手妈妈', favoriteCount: 1789, createdAt: '2024-01-16' },
-  { id: 8, title: '水煮鱼', description: '麻辣鲜香，鱼片滑嫩', coverImage: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&h=300&fit=crop', difficulty: 3, cookTime: 50, tags: ['川菜', '海鲜', '夜宵'], author: '辣味人生', favoriteCount: 1234, createdAt: '2024-01-14' }
-]
+  { id: 2, title: '番茄炒蛋', description: '最简单也最困难的国民家常菜', coverImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=450&fit=crop', difficulty: 1, cookTime: 15, tags: ['家常菜', '快手菜', '午餐'], author: '小厨神', favoriteCount: 2341, createdAt: '2024-01-18' },
+  { id: 3, title: '宫保鸡丁', description: '川菜经典，鸡肉滑嫩，花生酥脆', coverImage: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?w=400&h=280&fit=crop', difficulty: 2, cookTime: 30, tags: ['川菜', '经典', '晚餐'], author: '川菜大师', favoriteCount: 1892, createdAt: '2024-01-10' },
+  { id: 4, title: '清蒸鲈鱼', description: '粤式蒸鱼，鲜嫩爽滑，原汁原味', coverImage: 'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=400&h=350&fit=crop', difficulty: 2, cookTime: 25, tags: ['粤菜', '海鲜', '宴请'], author: '粤菜名厨', favoriteCount: 1567, createdAt: '2024-01-12' },
+  { id: 5, title: '麻婆豆腐', description: '麻辣鲜香，下饭神器，豆腐嫩滑入味', coverImage: 'https://images.unsplash.com/photo-1582576163090-09d3b6f8a969?w=400&h=400&fit=crop', difficulty: 1, cookTime: 20, tags: ['川菜', '家常菜', '午餐'], author: '四川厨子', favoriteCount: 2103, createdAt: '2024-01-20' },
+  { id: 6, title: '白切鸡', description: '粤菜经典，皮爽肉滑，原汁原味', coverImage: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400&h=320&fit=crop', difficulty: 2, cookTime: 45, tags: ['粤菜', '经典', '宴请'], author: '广东阿婆', favoriteCount: 1456, createdAt: '2024-01-08' },
+  { id: 7, title: '糖醋排骨', description: '酸甜可口，老少皆宜，外酥里嫩', coverImage: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=380&fit=crop', difficulty: 2, cookTime: 40, tags: ['家常菜', '浙菜', '晚餐'], author: '巧手妈妈', favoriteCount: 1789, createdAt: '2024-01-16' },
+  { id: 8, title: '水煮鱼', description: '麻辣鲜香，鱼片滑嫩，香辣过瘾', coverImage: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&h=420&fit=crop', difficulty: 3, cookTime: 50, tags: ['川菜', '海鲜', '夜宵'], author: '辣味人生', favoriteCount: 1234, createdAt: '2024-01-14' },
+  { id: 9, title: '鱼香肉丝', description: '咸甜酸辣兼备，葱姜蒜香浓郁', coverImage: 'https://images.unsplash.com/photo-1563379926898-05f4575a45d8?w=400&h=340&fit=crop', difficulty: 2, cookTime: 25, tags: ['川菜', '家常菜', '午餐'], author: '川菜大师', favoriteCount: 1678, createdAt: '2024-01-05' },
+  { id: 10, title: '扬州炒饭', description: '粒粒分明，香气扑鼻，配料丰富', coverImage: 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=400&h=290&fit=crop', difficulty: 1, cookTime: 20, tags: ['苏菜', '家常菜', '午餐'], author: '江南小厨', favoriteCount: 1945, createdAt: '2024-01-02' },
+  { id: 11, title: '可乐鸡翅', description: '甜香浓郁，肉质鲜嫩，新手必学', coverImage: 'https://images.unsplash.com/photo-1527477396000-e27163b481c2?w=400&h=370&fit=crop', difficulty: 1, cookTime: 30, tags: ['家常菜', '快手菜', '晚餐'], author: '新手厨师', favoriteCount: 2234, createdAt: '2024-01-19' },
+  { id: 12, title: '蒜蓉西兰花', description: '清淡健康，蒜香浓郁，翠绿爽脆', coverImage: 'https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=400&h=310&fit=crop', difficulty: 1, cookTime: 15, tags: ['家常菜', '素菜', '健康'], author: '健康达人', favoriteCount: 1123, createdAt: '2024-01-11' }
+])
 
-const recipes = ref([...allRecipes])
-
-const filteredRecipes = computed(() => {
-  let result = [...recipes.value]
+const allFilteredRecipes = computed(() => {
+  let result = [...allRecipes.value]
   
   if (filters.value.cuisine) {
     result = result.filter(r => r.tags.includes(filters.value.cuisine))
@@ -182,11 +203,35 @@ const filteredRecipes = computed(() => {
   return result
 })
 
+const displayRecipes = computed(() => {
+  const count = currentPage.value * pageSize
+  return allFilteredRecipes.value.slice(0, Math.min(count, allFilteredRecipes.value.length))
+})
+
+const hasMore = computed(() => displayRecipes.value.length < allFilteredRecipes.value.length)
+
+watch([filters, sortBy], () => {
+  currentPage.value = 1
+})
+
+const handleLayoutChange = (newLayout) => {
+  layout.value = newLayout
+}
+
+const handleSortChange = (sort) => {
+  sortBy.value = sort
+}
+
 onMounted(() => {
   if (route.query.category) {
     filters.value.cuisine = route.query.category
   }
   loading.value = false
+  window.addEventListener('scroll', handleScroll)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleScroll)
 })
 
 const updateFilter = (key, value) => {
@@ -197,6 +242,22 @@ const handleSearch = () => {
 }
 
 const loadMore = () => {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  setTimeout(() => {
+    currentPage.value++
+    loadingMore.value = false
+  }, 600)
+}
+
+const handleScroll = () => {
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+  const windowHeight = window.innerHeight
+  const documentHeight = document.documentElement.scrollHeight
+  
+  if (scrollTop + windowHeight >= documentHeight - 100) {
+    loadMore()
+  }
 }
 </script>
 
@@ -290,9 +351,19 @@ const loadMore = () => {
   }
 }
 
+.sort-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
 .sort-options {
   display: flex;
   gap: 16px;
+}
+
+.loading-more-inline {
+  padding: 20px 0;
 }
 
 .sort-option {

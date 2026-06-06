@@ -1,6 +1,6 @@
 <template>
-  <div class="recipe-card" @click="goToDetail">
-    <div class="card-image">
+  <div class="recipe-card" :class="{ 'waterfall-mode': mode === 'waterfall' }" @click="goToDetail">
+    <div class="card-image" :class="{ 'auto-height': mode === 'waterfall' }">
       <img :src="recipe.coverImage || defaultImage" :alt="recipe.title" loading="lazy" />
       <div class="card-overlay">
         <span class="difficulty">{{ getDifficultyLabel(recipe.difficulty) }}</span>
@@ -42,6 +42,10 @@ const props = defineProps({
   recipe: {
     type: Object,
     required: true
+  },
+  mode: {
+    type: String,
+    default: 'grid'
   }
 })
 
@@ -88,6 +92,15 @@ const goToDetail = () => {
   
   &:hover img {
     transform: scale(1.05);
+  }
+  
+  &.auto-height {
+    height: auto;
+    
+    img {
+      height: auto;
+      min-height: 160px;
+    }
   }
 }
 
