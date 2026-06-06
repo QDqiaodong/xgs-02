@@ -1,5 +1,19 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+
+const STORAGE_KEY = 'recipe-timer-store'
+
+const loadTimersFromStorage = () => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load timers from storage', e)
+  }
+  return {}
+}
 
 export const useRecipeStore = defineStore('recipe', () => {
   const recipes = ref([])
@@ -8,6 +22,41 @@ export const useRecipeStore = defineStore('recipe', () => {
   const userRecipes = ref([])
   const hotRecipes = ref([])
   const loading = ref(false)
+
+  const timers = ref(loadTimersFromStorage())
+
+  const saveTimersToStorage = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(timers.value))
+    } catch (e) {
+      console.error('Failed to save timers to storage', e)
+    }
+  }
+
+  watch(timers, saveTimersToStorage, { deep: true })
+
+  const getTimerState = (recipeId, stepIndex) => {
+    const key = `${recipeId}-${stepIndex}`
+    return timers.value[key] || {
+      duration: 60,
+      remaining: 60,
+      isRunning: false,
+      startTime: null,
+      elapsedBeforePause: 0
+    }
+  }
+
+  const setTimerState = (recipeId, stepIndex, state) => {
+    const key = `${recipeId}-${stepIndex}`
+    timers.value[key] = { ...state }
+    saveTimersToStorage()
+  }
+
+  const resetTimerState = (recipeId, stepIndex) => {
+    const key = `${recipeId}-${stepIndex}`
+    delete timers.value[key]
+    saveTimersToStorage()
+  }
 
   const getRecipeById = computed(() => (id) => {
     return recipes.value.find(r => r.id === id) || null
@@ -58,6 +107,7 @@ export const useRecipeStore = defineStore('recipe', () => {
     userRecipes,
     hotRecipes,
     loading,
+    timers,
     getRecipeById,
     isFavorite,
     setRecipes,
@@ -67,6 +117,9 @@ export const useRecipeStore = defineStore('recipe', () => {
     removeFavorite,
     setUserRecipes,
     setHotRecipes,
-    setLoading
+    setLoading,
+    getTimerState,
+    setTimerState,
+    resetTimerState
   }
 })

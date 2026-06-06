@@ -86,7 +86,14 @@
           <h2 class="section-title">👨‍🍳 烹饪步骤</h2>
           <div class="steps-list">
             <div v-for="(step, index) in recipe.steps" :key="index" class="step-item">
-              <div class="step-number">{{ index + 1 }}</div>
+              <div class="step-header">
+                <div class="step-number">{{ index + 1 }}</div>
+                <StepTimer 
+                  :recipe-id="recipe.id" 
+                  :step-index="index"
+                  :default-minutes="getDefaultStepTime(index, step)"
+                />
+              </div>
               <div class="step-content">
                 <div v-if="step.image" class="step-image">
                   <img :src="step.image" :alt="'步骤' + (index + 1)" />
@@ -117,6 +124,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
+import StepTimer from '@/components/StepTimer.vue'
 
 const route = useRoute()
 const store = useRecipeStore()
@@ -129,6 +137,17 @@ const isFavorited = computed(() => store.isFavorite(route.params.id))
 const getDifficultyLabel = (level) => {
   const labels = { 1: '简单', 2: '中等', 3: '困难' }
   return labels[level] || '中等'
+}
+
+const getDefaultStepTime = (index, step) => {
+  const content = (step.content || '').toLowerCase()
+  if (/炖煮|慢炖|小火炖|煮.*分钟|卤|焖/.test(content)) return 45
+  if (/焯水|汆/.test(content)) return 5
+  if (/炒.*糖色|炒糖/.test(content)) return 3
+  if (/翻炒|炒/.test(content)) return 5
+  if (/收汁/.test(content)) return 10
+  if (/腌|浸泡/.test(content)) return 15
+  return 5
 }
 
 onMounted(() => {
@@ -312,7 +331,14 @@ const shareRecipe = () => {
 
 .step-item {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .step-number {
@@ -331,6 +357,7 @@ const shareRecipe = () => {
 
 .step-content {
   flex: 1;
+  padding-left: 54px;
 }
 
 .step-image {
@@ -366,12 +393,142 @@ const shareRecipe = () => {
 }
 
 @media (max-width: 768px) {
+  .recipe-detail {
+    padding: 20px 0;
+  }
+
+  .container {
+    padding: 0 16px;
+  }
+
+  .section-card {
+    padding: 20px 16px;
+    margin-bottom: 16px;
+  }
+
+  .recipe-title {
+    font-size: 26px;
+  }
+
+  .section-title {
+    font-size: 20px;
+  }
+
   .detail-header {
     grid-template-columns: 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
   }
   
   .header-image {
     order: -1;
+  }
+
+  .header-image img {
+    height: 240px;
+  }
+
+  .recipe-meta {
+    gap: 16px;
+  }
+
+  .action-buttons {
+    gap: 12px;
+
+    .btn {
+      flex: 1;
+      justify-content: center;
+      padding: 14px 16px;
+      min-height: 48px;
+    }
+  }
+
+  .steps-list {
+    gap: 20px;
+  }
+
+  .step-item {
+    gap: 12px;
+  }
+
+  .step-header {
+    gap: 12px;
+  }
+
+  .step-number {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+
+  .step-content {
+    padding-left: 0;
+  }
+
+  .step-text {
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .ingredients-table {
+    th, td {
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .detail-header {
+    gap: 16px;
+  }
+
+  .recipe-title {
+    font-size: 22px;
+  }
+
+  .recipe-desc {
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .recipe-meta {
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .meta-item {
+    font-size: 13px;
+    gap: 6px;
+  }
+
+  .section-card {
+    padding: 16px 14px;
+  }
+
+  .section-title {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  .action-buttons {
+    .btn {
+      min-height: 50px;
+      font-size: 15px;
+    }
+  }
+
+  .ingredients-table {
+    th {
+      font-size: 13px;
+      padding: 8px 10px;
+    }
+
+    td {
+      padding: 10px;
+      font-size: 14px;
+    }
   }
 }
 </style>
