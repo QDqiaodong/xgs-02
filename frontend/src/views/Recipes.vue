@@ -90,6 +90,23 @@
               @click="handleSortChange('new')"
             >最新发布</span>
           </div>
+          <div v-if="sortBy === 'hot'" class="hot-dimension-tabs">
+            <span 
+              class="tab-item" 
+              :class="{ active: hotDimension === 'weekly' }"
+              @click="changeHotDimension('weekly')"
+            >周榜</span>
+            <span 
+              class="tab-item" 
+              :class="{ active: hotDimension === 'monthly' }"
+              @click="changeHotDimension('monthly')"
+            >月榜</span>
+            <span 
+              class="tab-item" 
+              :class="{ active: hotDimension === 'total' }"
+              @click="changeHotDimension('total')"
+            >总榜</span>
+          </div>
           <LayoutSwitcher :layout="layout" @change="handleLayoutChange" />
         </div>
       </div>
@@ -131,15 +148,18 @@ import { useRoute } from 'vue-router'
 import RecipeCard from '@/components/RecipeCard.vue'
 import LayoutSwitcher from '@/components/LayoutSwitcher.vue'
 import Waterfall from '@/components/Waterfall.vue'
+import { recipeApi } from '@/utils/api'
 
 const route = useRoute()
 
 const loading = ref(true)
 const loadingMore = ref(false)
 const sortBy = ref('hot')
+const hotDimension = ref('total')
 const layout = ref('grid')
 const pageSize = 4
 const currentPage = ref(1)
+const hotRecipesMap = ref({})
 
 const filters = ref({
   cuisine: '',
@@ -173,33 +193,50 @@ const allRecipes = ref([
 
 const allFilteredRecipes = computed(() => {
   let result = [...allRecipes.value]
-  
+
   if (filters.value.cuisine) {
     result = result.filter(r => r.tags.includes(filters.value.cuisine))
   }
-  
+
   if (filters.value.scene) {
     result = result.filter(r => r.tags.includes(filters.value.scene))
   }
-  
+
   if (filters.value.difficulty) {
     result = result.filter(r => r.difficulty === parseInt(filters.value.difficulty))
   }
-  
+
   if (filters.value.keyword) {
     const kw = filters.value.keyword.toLowerCase()
-    result = result.filter(r => 
-      r.title.toLowerCase().includes(kw) || 
+    result = result.filter(r =>
+      r.title.toLowerCase().includes(kw) ||
       r.description.toLowerCase().includes(kw)
     )
   }
-  
+
   if (sortBy.value === 'hot') {
+    const hotList = hotRecipesMap.value[hotDimension.value]
+    if (hotList && hotList.length > 0) {
+      const hotIds = new Set(hotList.map(r => r.id))
+      const filteredHot = hotList.filter(r => {
+        if (filters.value.cuisine && !r.tags?.includes(filters.value.cuisine)) return false
+        if (filters.value.scene && !r.tags?.includes(filters.value.scene)) return false
+        if (filters.value.difficulty && r.difficulty !== parseInt(filters.value.difficulty)) return false
+        if (filters.value.keyword) {
+          const kw = filters.value.keyword.toLowerCase()
+          if (!r.title?.toLowerCase().includes(kw) && !r.description?.toLowerCase().includes(kw)) return false
+        }
+        return true
+      })
+      if (filteredHot.length > 0) {
+        return filteredHot
+      }
+    }
     result.sort((a, b) => b.favoriteCount - a.favoriteCount)
   } else {
     result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   }
-  
+
   return result
 })
 
@@ -220,11 +257,41 @@ const handleLayoutChange = (newLayout) => {
 
 const handleSortChange = (sort) => {
   sortBy.value = sort
+  if (sort === 'hot') {
+    loadHotRecipes(hotDimension.value)
+  }
 }
 
-onMounted(() => {
+const changeHotDimension = async (dimension) => {
+  hotDimension.value = dimension
+  await loadHotRecipes(dimension)
+}
+
+const loadHotRecipes = async (dimension) => {
+  if (hotRecipesMap.value[dimension]) {
+    return
+  }
+  try {
+    const data = await recipeApi.getHotRecipes(dimension)
+    if (data && data.length) {
+      hotRecipesMap.value[dimension] = data.map(r => ({
+        ...r,
+        tags: r.tags ? r.tags.split(',') : []
+      }))
+    }
+  } catch (e) {
+    console.log('热门榜单加载失败，使用模拟数据')
+  }
+}
+
+onMounted(async () => {
   if (route.query.category) {
     filters.value.cuisine = route.query.category
+  }
+  try {
+    await loadHotRecipes(hotDimension.value)
+  } catch (e) {
+    console.log('使用模拟数据')
   }
   loading.value = false
   window.addEventListener('scroll', handleScroll)
@@ -360,6 +427,34 @@ const handleScroll = () => {
 .sort-options {
   display: flex;
   gap: 16px;
+}
+
+.hot-dimension-tabs {
+  display: flex;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  gap: 2px;
+}
+
+.tab-item {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+
+  &.active {
+    background: white;
+    color: var(--primary-color);
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
 }
 
 .loading-more-inline {

@@ -18,8 +18,9 @@ public class RecipeController {
     private final RecipeService recipeService;
 
     @GetMapping("/hot")
-    public Result<List<Recipe>> getHotRecipes() {
-        return Result.success(recipeService.getHotRecipes());
+    public Result<List<Recipe>> getHotRecipes(
+            @RequestParam(required = false, defaultValue = "total") String dimension) {
+        return Result.success(recipeService.getHotRecipes(dimension));
     }
 
     @GetMapping

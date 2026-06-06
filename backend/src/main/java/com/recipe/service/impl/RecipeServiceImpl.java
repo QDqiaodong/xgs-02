@@ -30,16 +30,28 @@ public class RecipeServiceImpl implements RecipeService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
 
-    @Value("${recipe.cache.hot-recipe-key:recipe:hot:monthly}")
-    private String hotRecipeKey;
+    private static final String HOT_RECIPE_KEY_WEEKLY = "recipe:hot:weekly";
+    private static final String HOT_RECIPE_KEY_MONTHLY = "recipe:hot:monthly";
+    private static final String HOT_RECIPE_KEY_TOTAL = "recipe:hot:total";
+
+    private static final String DIMENSION_WEEKLY = "weekly";
+    private static final String DIMENSION_MONTHLY = "monthly";
+    private static final String DIMENSION_TOTAL = "total";
 
     @Value("${recipe.cache.hot-recipe-expire:86400}")
     private Long hotRecipeExpire;
 
     @Override
     public List<Recipe> getHotRecipes() {
+        return getHotRecipes(DIMENSION_TOTAL);
+    }
+
+    @Override
+    public List<Recipe> getHotRecipes(String dimension) {
+        String cacheKey = resolveCacheKey(dimension);
+
         Set<ZSetOperations.TypedTuple<Object>> cached = redisTemplate.opsForZSet()
-                .reverseRangeWithScores(hotRecipeKey, 0, 9);
+                .reverseRangeWithScores(cacheKey, 0, 9);
 
         if (cached != null && !cached.isEmpty()) {
             return cached.stream()
@@ -54,25 +66,58 @@ public class RecipeServiceImpl implements RecipeService {
                     .toList();
         }
 
-        List<Recipe> recipes = recipeMapper.selectHotRecipes(10);
-        cacheHotRecipes(recipes);
+        List<Recipe> recipes = fetchHotRecipesByDimension(dimension, 10);
+        cacheHotRecipes(cacheKey, recipes);
         return recipes;
     }
 
-    private void cacheHotRecipes(List<Recipe> recipes) {
+    private String resolveCacheKey(String dimension) {
+        if (DIMENSION_WEEKLY.equals(dimension)) {
+            return HOT_RECIPE_KEY_WEEKLY;
+        } else if (DIMENSION_MONTHLY.equals(dimension)) {
+            return HOT_RECIPE_KEY_MONTHLY;
+        } else {
+            return HOT_RECIPE_KEY_TOTAL;
+        }
+    }
+
+    private List<Recipe> fetchHotRecipesByDimension(String dimension, Integer limit) {
+        if (DIMENSION_WEEKLY.equals(dimension)) {
+            return recipeMapper.selectWeeklyHotRecipes(limit);
+        } else if (DIMENSION_MONTHLY.equals(dimension)) {
+            return recipeMapper.selectMonthlyHotRecipes(limit);
+        } else {
+            return recipeMapper.selectHotRecipes(limit);
+        }
+    }
+
+    private void cacheHotRecipes(String cacheKey, List<Recipe> recipes) {
         recipes.forEach(recipe -> {
-            redisTemplate.opsForZSet().add(hotRecipeKey, recipe, recipe.getFavoriteCount());
+            redisTemplate.opsForZSet().add(cacheKey, recipe, recipe.getFavoriteCount() != null ? recipe.getFavoriteCount() : 0);
         });
-        redisTemplate.expire(hotRecipeKey, hotRecipeExpire, TimeUnit.SECONDS);
+        redisTemplate.expire(cacheKey, hotRecipeExpire, TimeUnit.SECONDS);
     }
 
     @Scheduled(cron = "0 0 2 * * ?")
     public void refreshHotRecipes() {
         log.info("开始刷新热门菜谱缓存...");
-        List<Recipe> recipes = recipeMapper.selectHotRecipes(10);
-        redisTemplate.delete(hotRecipeKey);
-        cacheHotRecipes(recipes);
-        log.info("热门菜谱缓存刷新完成");
+
+        List<Recipe> weeklyRecipes = recipeMapper.selectWeeklyHotRecipes(10);
+        redisTemplate.delete(HOT_RECIPE_KEY_WEEKLY);
+        cacheHotRecipes(HOT_RECIPE_KEY_WEEKLY, weeklyRecipes);
+        log.info("周榜缓存刷新完成，共{}条", weeklyRecipes.size());
+
+        List<Recipe> monthlyRecipes = recipeMapper.selectMonthlyHotRecipes(10);
+        redisTemplate.delete(HOT_RECIPE_KEY_MONTHLY);
+        cacheHotRecipes(HOT_RECIPE_KEY_MONTHLY, monthlyRecipes);
+        log.info("月榜缓存刷新完成，共{}条", monthlyRecipes.size());
+
+        List<Recipe> totalRecipes = recipeMapper.selectHotRecipes(10);
+        redisTemplate.delete(HOT_RECIPE_KEY_TOTAL);
+        cacheHotRecipes(HOT_RECIPE_KEY_TOTAL, totalRecipes);
+        log.info("总榜缓存刷新完成，共{}条", totalRecipes.size());
+
+        log.info("热门菜谱缓存全部刷新完成");
     }
 
     @Override

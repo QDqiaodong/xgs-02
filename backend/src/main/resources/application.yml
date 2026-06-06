@@ -52,5 +52,4 @@ recipe:
     path: ${RECIPE_IMAGE_PATH:/app/images}
     url-prefix: ${RECIPE_IMAGE_URL_PREFIX:http://localhost:9025/api/images}
   cache:
-    hot-recipe-key: recipe:hot:monthly
     hot-recipe-expire: 86400

@@ -18,4 +18,22 @@ public interface RecipeMapper extends BaseMapper<Recipe> {
             "ORDER BY favorite_count DESC " +
             "LIMIT #{limit}")
     List<Recipe> selectHotRecipes(@Param("limit") Integer limit);
+
+    @Select("SELECT r.*, COUNT(f.id) as favorite_count FROM recipe r " +
+            "LEFT JOIN favorite f ON r.id = f.recipe_id " +
+            "WHERE r.status = 1 AND r.is_draft = 0 AND r.deleted = 0 " +
+            "AND f.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) " +
+            "GROUP BY r.id " +
+            "ORDER BY favorite_count DESC " +
+            "LIMIT #{limit}")
+    List<Recipe> selectWeeklyHotRecipes(@Param("limit") Integer limit);
+
+    @Select("SELECT r.*, COUNT(f.id) as favorite_count FROM recipe r " +
+            "LEFT JOIN favorite f ON r.id = f.recipe_id " +
+            "WHERE r.status = 1 AND r.is_draft = 0 AND r.deleted = 0 " +
+            "AND f.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) " +
+            "GROUP BY r.id " +
+            "ORDER BY favorite_count DESC " +
+            "LIMIT #{limit}")
+    List<Recipe> selectMonthlyHotRecipes(@Param("limit") Integer limit);
 }

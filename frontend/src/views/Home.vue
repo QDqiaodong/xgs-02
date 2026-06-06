@@ -31,7 +31,26 @@
     <section class="section" ref="hotSectionRef">
       <div class="container">
         <div class="section-header">
-          <h2 class="section-title">🔥 本月热门菜谱</h2>
+          <div class="section-title-wrapper">
+            <h2 class="section-title">🔥 热门菜谱</h2>
+            <div class="hot-dimension-tabs">
+              <span 
+                class="tab-item" 
+                :class="{ active: hotDimension === 'weekly' }"
+                @click="changeHotDimension('weekly')"
+              >周榜</span>
+              <span 
+                class="tab-item" 
+                :class="{ active: hotDimension === 'monthly' }"
+                @click="changeHotDimension('monthly')"
+              >月榜</span>
+              <span 
+                class="tab-item" 
+                :class="{ active: hotDimension === 'total' }"
+                @click="changeHotDimension('total')"
+              >总榜</span>
+            </div>
+          </div>
           <LayoutSwitcher :layout="hotLayout" @change="hotLayout = $event" />
         </div>
         <div v-if="loading" class="loading">
@@ -113,8 +132,10 @@ const loading = ref(true)
 const loadingMore = ref(false)
 const hotLayout = ref('grid')
 const hotPage = ref(1)
+const hotDimension = ref('monthly')
 const pageSize = 4
 const hotSectionRef = ref(null)
+const hotRecipesMap = ref({})
 
 const allHotRecipes = ref([
   { id: 1, title: '红烧五花肉', description: '经典家常菜，肥而不腻，入口即化', coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=400&h=300&fit=crop', difficulty: 2, cookTime: 60, tags: ['川菜', '家常菜'], author: '美食达人', favoriteCount: 1286 },
@@ -162,7 +183,7 @@ const handleScroll = () => {
 
 onMounted(async () => {
   try {
-    await loadHotRecipes()
+    await loadHotRecipes(hotDimension.value)
   } catch (e) {
     console.log('使用模拟数据')
   } finally {
@@ -175,11 +196,26 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleScroll)
 })
 
-const loadHotRecipes = async () => {
-  const data = await recipeApi.getHotRecipes()
+const changeHotDimension = async (dimension) => {
+  hotDimension.value = dimension
+  hotPage.value = 1
+  await loadHotRecipes(dimension)
+}
+
+const loadHotRecipes = async (dimension = hotDimension.value) => {
+  if (hotRecipesMap.value[dimension]) {
+    allHotRecipes.value = hotRecipesMap.value[dimension]
+    return
+  }
+  const data = await recipeApi.getHotRecipes(dimension)
   if (data && data.length) {
-    allHotRecipes.value = data
-    store.setHotRecipes(data)
+    const formatted = data.map(r => ({
+      ...r,
+      tags: r.tags ? r.tags.split(',') : []
+    }))
+    hotRecipesMap.value[dimension] = formatted
+    allHotRecipes.value = formatted
+    store.setHotRecipes(formatted)
   }
 }
 
@@ -283,6 +319,40 @@ const filterByCategory = (category) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
+}
+
+.section-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.hot-dimension-tabs {
+  display: flex;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  gap: 2px;
+}
+
+.hot-dimension-tabs .tab-item {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+
+  &.active {
+    background: white;
+    color: var(--primary-color);
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
 }
 
 .loading-more {

@@ -10,6 +10,8 @@ public interface RecipeService {
 
     List<Recipe> getHotRecipes();
 
+    List<Recipe> getHotRecipes(String dimension);
+
     Page<Recipe> getRecipePage(Integer page, Integer size, String keyword, String cuisine, String scene, Integer difficulty);
 
     Recipe getRecipeDetail(Long id);
