@@ -60,4 +60,10 @@ public interface RecipeMapper extends BaseMapper<Recipe> {
                                          @Param("cuisine") String cuisine,
                                          @Param("scene") String scene,
                                          @Param("difficulty") Integer difficulty);
+
+    @Select("SELECT r.* FROM recipe r " +
+            "WHERE r.status = 1 AND r.is_draft = 0 AND r.deleted = 0 " +
+            "AND r.id != #{excludeId} " +
+            "AND r.tags IS NOT NULL AND r.tags != ''")
+    List<Recipe> selectSimilarCandidates(@Param("excludeId") Long excludeId);
 }

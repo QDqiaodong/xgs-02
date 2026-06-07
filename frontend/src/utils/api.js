@@ -31,6 +31,8 @@ export const recipeApi = {
   deleteRecipe: (id) => api.delete(`/recipes/${id}`),
   saveDraft: (data) => api.post('/recipes/draft', data),
   getDrafts: () => api.get('/recipes/drafts'),
+  getSimilarRecipes: (id, limit = 6) =>
+    api.get(`/recipes/${id}/similar`, { params: { limit } }).then((result) => result?.data || []),
   
   getFavorites: () => api.get('/favorites'),
   addFavorite: (recipeId) => api.post('/favorites', { recipeId }),

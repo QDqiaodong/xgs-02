@@ -29,4 +29,6 @@ public interface RecipeService {
     List<Recipe> getUserRecipes();
 
     void updateHotRecipeCache(Long recipeId, Integer delta);
+
+    List<Recipe> getSimilarRecipes(Long recipeId, Integer limit);
 }

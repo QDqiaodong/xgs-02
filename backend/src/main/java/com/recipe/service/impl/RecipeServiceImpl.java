@@ -17,9 +17,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -332,5 +332,105 @@ public class RecipeServiceImpl implements RecipeService {
         
         recipe.setTips(dto.getTips());
         return recipe;
+    }
+
+    @Override
+    public List<Recipe> getSimilarRecipes(Long recipeId, Integer limit) {
+        Recipe currentRecipe = recipeMapper.selectById(recipeId);
+        if (currentRecipe == null || currentRecipe.getTags() == null || currentRecipe.getTags().isEmpty()) {
+            return recipeMapper.selectHotRecipes(limit != null ? limit : 6);
+        }
+
+        Set<String> currentTags = Arrays.stream(currentRecipe.getTags().split(","))
+                .map(String::trim)
+                .filter(t -> !t.isEmpty())
+                .collect(Collectors.toSet());
+
+        if (currentTags.isEmpty()) {
+            return recipeMapper.selectHotRecipes(limit != null ? limit : 6);
+        }
+
+        List<Recipe> candidates = recipeMapper.selectSimilarCandidates(recipeId);
+
+        List<RecipeWithScore> scored = candidates.stream()
+                .map(r -> {
+                    Set<String> recipeTags = Arrays.stream(r.getTags().split(","))
+                            .map(String::trim)
+                            .filter(t -> !t.isEmpty())
+                            .collect(Collectors.toSet());
+
+                    double tagScore = 0;
+                    for (String tag : currentTags) {
+                        if (recipeTags.contains(tag)) {
+                            tagScore += 1.0;
+                        } else {
+                            for (String rt : recipeTags) {
+                                if (rt.contains(tag) || tag.contains(rt)) {
+                                    tagScore += 0.5;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    double tagSimilarity = currentTags.isEmpty() ? 0 : tagScore / currentTags.size();
+
+                    double difficultyBonus = 0;
+                    if (currentRecipe.getDifficulty() != null && r.getDifficulty() != null) {
+                        int diff = Math.abs(currentRecipe.getDifficulty() - r.getDifficulty());
+                        if (diff == 0) difficultyBonus = 0.1;
+                        else if (diff == 1) difficultyBonus = 0.05;
+                    }
+
+                    double cookTimeBonus = 0;
+                    if (currentRecipe.getCookTime() != null && r.getCookTime() != null) {
+                        double ratio = Math.min(currentRecipe.getCookTime(), r.getCookTime())
+                                / (double) Math.max(currentRecipe.getCookTime(), r.getCookTime());
+                        cookTimeBonus = ratio * 0.1;
+                    }
+
+                    double popularityBonus = (r.getFavoriteCount() != null ? r.getFavoriteCount() : 0) / 10000.0;
+                    popularityBonus = Math.min(popularityBonus, 0.1);
+
+                    double totalScore = tagSimilarity * 0.7 + difficultyBonus + cookTimeBonus + popularityBonus;
+
+                    return new RecipeWithScore(r, totalScore);
+                })
+                .sorted((a, b) -> Double.compare(b.score, a.score))
+                .limit(limit != null ? limit : 6)
+                .collect(Collectors.toList());
+
+        if (scored.isEmpty()) {
+            return recipeMapper.selectHotRecipes(limit != null ? limit : 6);
+        }
+
+        List<Recipe> result = scored.stream()
+                .map(rs -> rs.recipe)
+                .collect(Collectors.toList());
+
+        int needMore = (limit != null ? limit : 6) - result.size();
+        if (needMore > 0) {
+            Set<Long> existingIds = result.stream().map(Recipe::getId).collect(Collectors.toSet());
+            List<Recipe> hotRecipes = recipeMapper.selectHotRecipes(needMore + existingIds.size());
+            for (Recipe hot : hotRecipes) {
+                if (!existingIds.contains(hot.getId()) && !hot.getId().equals(recipeId)) {
+                    result.add(hot);
+                    existingIds.add(hot.getId());
+                    if (result.size() >= (limit != null ? limit : 6)) break;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static class RecipeWithScore {
+        final Recipe recipe;
+        final double score;
+
+        RecipeWithScore(Recipe recipe, double score) {
+            this.recipe = recipe;
+            this.score = score;
+        }
     }
 }

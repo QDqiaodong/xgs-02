@@ -179,6 +179,36 @@
           </div>
         </div>
       </div>
+
+      <div class="similar-section section-card no-print" v-if="similarRecipes.length > 0 || loadingSimilar">
+        <div class="similar-header">
+          <h2 class="section-title">✨ 猜你喜欢</h2>
+          <div class="similar-nav">
+            <button class="nav-btn" @click="scrollSimilar('left')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <button class="nav-btn" @click="scrollSimilar('right')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="similar-scroll-wrapper">
+          <div class="similar-scroll-container" v-if="!loadingSimilar">
+            <div class="similar-card-wrapper" v-for="item in similarRecipes" :key="item.id">
+              <RecipeCard :recipe="item" mode="grid" />
+            </div>
+          </div>
+          <div class="similar-loading" v-else>
+            <div class="spinner"></div>
+            <span>正在为您推荐相似菜谱...</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   
@@ -193,11 +223,15 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
 import StepTimer from '@/components/StepTimer.vue'
+import RecipeCard from '@/components/RecipeCard.vue'
+import { recipeApi } from '@/utils/api'
 
 const route = useRoute()
 const store = useRecipeStore()
 
 const recipe = ref(null)
+const similarRecipes = ref([])
+const loadingSimilar = ref(false)
 const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&h=500&fit=crop'
 
 const originalServings = ref(1)
@@ -206,6 +240,51 @@ const minServings = 1
 const maxServings = 20
 
 const isFavorited = computed(() => store.isFavorite(route.params.id))
+
+const parseRecipeData = (data) => {
+  if (!data) return null
+  const result = { ...data }
+  if (typeof result.tags === 'string') {
+    result.tags = result.tags.split(',').map(t => t.trim()).filter(t => t)
+  } else if (!result.tags) {
+    result.tags = []
+  }
+  if (typeof result.ingredients === 'string') {
+    try {
+      result.ingredients = JSON.parse(result.ingredients)
+    } catch {
+      result.ingredients = []
+    }
+  } else if (!result.ingredients) {
+    result.ingredients = []
+  }
+  if (typeof result.steps === 'string') {
+    try {
+      result.steps = JSON.parse(result.steps)
+    } catch {
+      result.steps = []
+    }
+  } else if (!result.steps) {
+    result.steps = []
+  }
+  if (result.ingredients && result.ingredients.length > 0) {
+    const firstItem = result.ingredients[0]
+    if (firstItem.servings) {
+      originalServings.value = parseInt(firstItem.servings) || 1
+      currentServings.value = originalServings.value
+    }
+  }
+  return result
+}
+
+const normalizeRecipeForCard = (r) => {
+  if (!r) return r
+  const result = { ...r }
+  if (typeof result.tags === 'string') {
+    result.tags = result.tags.split(',').map(t => t.trim()).filter(t => t)
+  }
+  return result
+}
 
 const parseAmount = (amountStr) => {
   if (!amountStr || amountStr === '适量') {
@@ -374,40 +453,42 @@ onMounted(() => {
   loadRecipe()
 })
 
-const loadRecipe = () => {
-  setTimeout(() => {
-    recipe.value = {
-      id: route.params.id,
-      title: '红烧五花肉',
-      description: '经典家常菜，选用优质五花肉，经过慢火炖煮，肥而不腻，入口即化，是一道让人回味无穷的传统美味。',
-      coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=800&h=500&fit=crop',
-      author: '美食达人',
-      cookTime: 60,
-      difficulty: 2,
-      favoriteCount: 1286,
-      tags: ['川菜', '家常菜', '下饭神器'],
-      ingredients: [
-        { name: '五花肉', amount: '500g', note: '选三层肉最佳' },
-        { name: '生抽', amount: '2勺', note: '' },
-        { name: '老抽', amount: '1勺', note: '上色用' },
-        { name: '冰糖', amount: '30g', note: '' },
-        { name: '料酒', amount: '2勺', note: '' },
-        { name: '姜片', amount: '5片', note: '' },
-        { name: '八角', amount: '2个', note: '' },
-        { name: '桂皮', amount: '1小块', note: '' },
-        { name: '盐', amount: '适量', note: '' }
-      ],
-      steps: [
-        { content: '五花肉切成2-3厘米见方的块，冷水下锅，加入姜片和料酒，大火烧开后焯水3分钟，捞出洗净沥干。', image: '' },
-        { content: '锅中放少许油，加入冰糖小火炒出糖色，注意火候不要太大，避免炒糊。', image: '' },
-        { content: '放入焯水后的五花肉，翻炒均匀，让每一块肉都裹上糖色。', image: '' },
-        { content: '加入生抽、老抽、料酒，放入八角、桂皮、剩余的姜片，翻炒出香味。', image: '' },
-        { content: '加入没过肉的热水，大火烧开后转小火，盖上锅盖炖煮45分钟。', image: '' },
-        { content: '最后大火收汁，根据口味加适量盐调味，汤汁浓稠即可出锅。', image: '' }
-      ],
-      tips: '1. 焯水要冷水下锅，能更好地去除血水和腥味\n2. 炒糖色要用小火，颜色变成枣红色即可\n3. 加水一定要加热水，肉质才不会柴\n4. 最后收汁不要收太干，留一点汤汁拌饭超好吃'
+const loadRecipe = async () => {
+  try {
+    const result = await recipeApi.getRecipeDetail(route.params.id)
+    recipe.value = parseRecipeData(result?.data)
+    if (recipe.value) {
+      loadSimilarRecipes()
     }
-  }, 500)
+  } catch (err) {
+    console.error('加载食谱详情失败', err)
+    ElMessage.error('加载食谱失败')
+  }
+}
+
+const loadSimilarRecipes = async () => {
+  if (!recipe.value?.id) return
+  loadingSimilar.value = true
+  try {
+    const list = await recipeApi.getSimilarRecipes(recipe.value.id, 6)
+    similarRecipes.value = list.map(normalizeRecipeForCard)
+  } catch (err) {
+    console.error('加载相似食谱失败', err)
+    similarRecipes.value = []
+  } finally {
+    loadingSimilar.value = false
+  }
+}
+
+const scrollSimilar = (direction) => {
+  const container = document.querySelector('.similar-scroll-container')
+  if (container) {
+    const scrollAmount = container.clientWidth * 0.8
+    container.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    })
+  }
 }
 
 const toggleFavorite = () => {
@@ -981,6 +1062,132 @@ const printRecipe = () => {
       padding: 10px;
       font-size: 14px;
     }
+  }
+}
+
+.similar-section {
+  margin-top: 8px;
+}
+
+.similar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+
+  .section-title {
+    margin-bottom: 0;
+  }
+}
+
+.similar-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+  }
+}
+
+.similar-scroll-wrapper {
+  position: relative;
+}
+
+.similar-scroll-container {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--text-light);
+  }
+}
+
+.similar-card-wrapper {
+  flex-shrink: 0;
+  width: 260px;
+}
+
+.similar-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+  }
+}
+
+@media (max-width: 768px) {
+  .similar-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .similar-nav {
+    align-self: flex-end;
+  }
+
+  .similar-card-wrapper {
+    width: 220px;
+  }
+
+  .similar-scroll-container {
+    gap: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .similar-card-wrapper {
+    width: 200px;
   }
 }
 

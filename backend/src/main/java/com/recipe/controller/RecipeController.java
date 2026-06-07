@@ -63,4 +63,11 @@ public class RecipeController {
     public Result<List<Recipe>> getDrafts() {
         return Result.success(recipeService.getDrafts());
     }
+
+    @GetMapping("/{id}/similar")
+    public Result<List<Recipe>> getSimilarRecipes(
+            @PathVariable Long id,
+            @RequestParam(required = false, defaultValue = "6") Integer limit) {
+        return Result.success(recipeService.getSimilarRecipes(id, limit));
+    }
 }
