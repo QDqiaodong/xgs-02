@@ -38,4 +38,10 @@ import Footer from '@/components/Footer.vue'
 .fade-leave-to {
   opacity: 0;
 }
+
+@media print {
+  .main-content {
+    padding-top: 0 !important;
+  }
+}
 </style>

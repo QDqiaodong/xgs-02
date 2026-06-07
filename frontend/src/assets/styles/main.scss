@@ -230,3 +230,33 @@ img {
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   }
 }
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html, body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  a {
+    text-decoration: none !important;
+    color: inherit !important;
+  }
+
+  .header,
+  .footer,
+  header,
+  footer {
+    display: none !important;
+  }
+}

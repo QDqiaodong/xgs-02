@@ -29,7 +29,7 @@
             <span v-for="tag in recipe.tags" :key="tag" class="tag">{{ tag }}</span>
           </div>
           
-          <div class="action-buttons">
+          <div class="action-buttons no-print">
             <button 
               class="btn btn-primary" 
               :class="{ favorited: isFavorited }"
@@ -53,6 +53,14 @@
               </svg>
               分享
             </button>
+            <button class="btn btn-outline" @click="printRecipe">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+              </svg>
+              打印
+            </button>
           </div>
         </div>
         
@@ -65,7 +73,7 @@
         <div class="ingredients-section section-card">
           <div class="ingredients-header">
             <h2 class="section-title">🥬 食材清单</h2>
-            <div class="servings-control">
+            <div class="servings-control no-print">
               <div class="servings-label">
                 <span class="servings-icon">👥</span>
                 <span>份数</span>
@@ -146,11 +154,13 @@
             <div v-for="(step, index) in recipe.steps" :key="index" class="step-item">
               <div class="step-header">
                 <div class="step-number">{{ index + 1 }}</div>
-                <StepTimer 
-                  :recipe-id="recipe.id" 
-                  :step-index="index"
-                  :default-minutes="getDefaultStepTime(index, step)"
-                />
+                <div class="no-print">
+                  <StepTimer 
+                    :recipe-id="recipe.id" 
+                    :step-index="index"
+                    :default-minutes="getDefaultStepTime(index, step)"
+                  />
+                </div>
               </div>
               <div class="step-content">
                 <div v-if="step.image" class="step-image">
@@ -412,6 +422,10 @@ const toggleFavorite = () => {
 
 const shareRecipe = () => {
   ElMessage.info('分享功能开发中')
+}
+
+const printRecipe = () => {
+  window.print()
 }
 </script>
 
@@ -967,6 +981,195 @@ const shareRecipe = () => {
       padding: 10px;
       font-size: 14px;
     }
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm 15mm 15mm 15mm;
+  }
+
+  .recipe-detail {
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  .container {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .detail-header {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+    margin-bottom: 20px !important;
+    page-break-inside: avoid;
+  }
+
+  .header-image {
+    order: -1 !important;
+  }
+
+  .header-image img {
+    width: 100% !important;
+    max-height: 200px !important;
+    height: auto !important;
+    object-fit: cover !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+
+  .recipe-title {
+    font-size: 24px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .recipe-desc {
+    font-size: 13px !important;
+    margin-bottom: 12px !important;
+    line-height: 1.5 !important;
+  }
+
+  .recipe-meta {
+    gap: 12px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .meta-item {
+    font-size: 12px !important;
+    gap: 4px !important;
+  }
+
+  .meta-icon {
+    font-size: 14px !important;
+  }
+
+  .recipe-tags {
+    margin-bottom: 12px !important;
+  }
+
+  .tag {
+    font-size: 11px !important;
+    padding: 2px 8px !important;
+    margin-right: 4px !important;
+    margin-bottom: 4px !important;
+    border: 1px solid #ccc !important;
+    background: transparent !important;
+    color: #333 !important;
+  }
+
+  .section-card {
+    background: white !important;
+    border-radius: 0 !important;
+    padding: 12px 0 !important;
+    margin-bottom: 12px !important;
+    box-shadow: none !important;
+    border-bottom: 1px solid #e0e0e0;
+    page-break-inside: avoid;
+  }
+
+  .section-title {
+    font-size: 16px !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #e67e22;
+  }
+
+  .section-title::after {
+    display: none !important;
+  }
+
+  .ingredients-header {
+    margin-bottom: 12px !important;
+  }
+
+  .ingredients-table {
+    width: 100% !important;
+    font-size: 12px !important;
+  }
+
+  .ingredients-table th,
+  .ingredients-table td {
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+    border-bottom: 1px solid #e0e0e0 !important;
+  }
+
+  .ingredients-table th {
+    background: #f5f5f5 !important;
+    font-weight: 600 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .amount-value {
+    color: #333 !important;
+    font-weight: normal !important;
+  }
+
+  .steps-list {
+    gap: 12px !important;
+  }
+
+  .step-item {
+    gap: 8px !important;
+    page-break-inside: avoid;
+  }
+
+  .step-header {
+    gap: 8px !important;
+  }
+
+  .step-number {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 14px !important;
+    background: #e67e22 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .step-content {
+    padding-left: 36px !important;
+  }
+
+  .step-image img {
+    max-width: 300px !important;
+    max-height: 200px !important;
+    height: auto !important;
+    border-radius: 0 !important;
+    page-break-inside: avoid;
+  }
+
+  .step-text {
+    font-size: 13px !important;
+    line-height: 1.6 !important;
+  }
+
+  .tips-content {
+    background: #f9f9f9 !important;
+    padding: 12px !important;
+    font-size: 12px !important;
+    line-height: 1.7 !important;
+    border: 1px solid #e0e0e0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    white-space: pre-line !important;
+  }
+
+  .detail-content {
+    page-break-before: auto;
+  }
+
+  .detail-content > * {
+    page-break-inside: avoid;
   }
 }
 </style>
