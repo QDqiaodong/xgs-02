@@ -63,15 +63,39 @@
 
         <div class="search-box">
           <input 
+            ref="searchInputRef"
             type="text" 
             v-model="filters.keyword" 
             placeholder="搜索菜谱..."
             @input="handleSearch"
+            @keydown="handleKeydown"
+            @blur="handleSearchBlur"
+            @focus="handleSearchFocus"
+            autocomplete="off"
           />
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
+          <transition name="fade">
+            <div 
+              v-if="showSuggestions && searchSuggestions.length > 0" 
+              class="suggestions-dropdown"
+              ref="suggestionListRef"
+            >
+              <div
+                v-for="(recipe, index) in searchSuggestions"
+                :key="recipe.id"
+                class="suggestion-item"
+                :class="{ active: activeSuggestionIndex === index }"
+                @mousedown.prevent="goToRecipeDetail(recipe)"
+                @mouseenter="handleSuggestionHover(index)"
+              >
+                <span class="suggestion-icon">🍽️</span>
+                <span class="suggestion-title" v-html="highlightMatch(recipe.title)"></span>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
 
@@ -143,14 +167,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import RecipeCard from '@/components/RecipeCard.vue'
 import LayoutSwitcher from '@/components/LayoutSwitcher.vue'
 import Waterfall from '@/components/Waterfall.vue'
 import { recipeApi } from '@/utils/api'
 
 const route = useRoute()
+const router = useRouter()
 
 const loading = ref(true)
 const loadingMore = ref(false)
@@ -161,6 +186,11 @@ const pageSize = 4
 const currentPage = ref(1)
 const hotRecipesMap = ref({})
 const loadedHotDimensions = ref(new Set())
+
+const showSuggestions = ref(false)
+const activeSuggestionIndex = ref(-1)
+const searchInputRef = ref(null)
+const suggestionListRef = ref(null)
 
 const filters = ref({
   cuisine: '',
@@ -245,8 +275,35 @@ const displayRecipes = computed(() => {
 
 const hasMore = computed(() => displayRecipes.value.length < allFilteredRecipes.value.length)
 
+const allRecipeTitles = computed(() => {
+  if (sortBy.value === 'hot' && loadedHotDimensions.value.has(hotDimension.value)) {
+    const hotList = hotRecipesMap.value[hotDimension.value] || []
+    return [...hotList, ...allRecipes.value]
+  }
+  return allRecipes.value
+})
+
+const searchSuggestions = computed(() => {
+  const kw = filters.value.keyword.trim().toLowerCase()
+  if (!kw) return []
+  const matched = allRecipeTitles.value.filter(r =>
+    r.title?.toLowerCase().includes(kw)
+  )
+  const seen = new Set()
+  return matched.filter(r => {
+    if (seen.has(r.id)) return false
+    seen.add(r.id)
+    return true
+  }).slice(0, 8)
+})
+
 watch([filters, sortBy], () => {
   currentPage.value = 1
+})
+
+watch(() => filters.value.keyword, () => {
+  activeSuggestionIndex.value = -1
+  showSuggestions.value = filters.value.keyword.trim().length > 0
 })
 
 const handleLayoutChange = (newLayout) => {
@@ -315,6 +372,70 @@ const updateFilter = (key, value) => {
 }
 
 const handleSearch = () => {
+}
+
+const handleKeydown = (e) => {
+  if (!showSuggestions.value || searchSuggestions.value.length === 0) return
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    activeSuggestionIndex.value = (activeSuggestionIndex.value + 1) % searchSuggestions.value.length
+    scrollActiveSuggestionIntoView()
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (activeSuggestionIndex.value === -1) {
+      activeSuggestionIndex.value = searchSuggestions.value.length - 1
+    } else {
+      activeSuggestionIndex.value = (activeSuggestionIndex.value - 1 + searchSuggestions.value.length) % searchSuggestions.value.length
+    }
+    scrollActiveSuggestionIntoView()
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (activeSuggestionIndex.value >= 0 && activeSuggestionIndex.value < searchSuggestions.value.length) {
+      goToRecipeDetail(searchSuggestions.value[activeSuggestionIndex.value])
+    }
+  } else if (e.key === 'Escape') {
+    showSuggestions.value = false
+    activeSuggestionIndex.value = -1
+  }
+}
+
+const scrollActiveSuggestionIntoView = async () => {
+  await nextTick()
+  if (!suggestionListRef.value) return
+  const activeEl = suggestionListRef.value.querySelector('.suggestion-item.active')
+  if (activeEl) {
+    activeEl.scrollIntoView({ block: 'nearest' })
+  }
+}
+
+const goToRecipeDetail = (recipe) => {
+  showSuggestions.value = false
+  activeSuggestionIndex.value = -1
+  router.push(`/recipe/${recipe.id}`)
+}
+
+const handleSuggestionHover = (index) => {
+  activeSuggestionIndex.value = index
+}
+
+const handleSearchBlur = () => {
+  setTimeout(() => {
+    showSuggestions.value = false
+  }, 150)
+}
+
+const handleSearchFocus = () => {
+  if (filters.value.keyword.trim().length > 0) {
+    showSuggestions.value = true
+  }
+}
+
+const highlightMatch = (text) => {
+  const kw = filters.value.keyword.trim()
+  if (!kw) return text
+  const regex = new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+  return text.replace(regex, '<em class="highlight">$1</em>')
 }
 
 const loadMore = () => {
@@ -412,7 +533,67 @@ const handleScroll = () => {
     width: 20px;
     height: 20px;
     color: var(--text-light);
+    pointer-events: none;
   }
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  gap: 10px;
+
+  &:hover,
+  &.active {
+    background-color: var(--bg-secondary);
+  }
+
+  &.active {
+    background-color: rgba(255, 107, 53, 0.08);
+  }
+}
+
+.suggestion-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.suggestion-title {
+  font-size: 14px;
+  color: var(--text-primary);
+
+  :deep(.highlight) {
+    color: var(--primary-color);
+    font-style: normal;
+    font-weight: 600;
+  }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .sort-bar {
