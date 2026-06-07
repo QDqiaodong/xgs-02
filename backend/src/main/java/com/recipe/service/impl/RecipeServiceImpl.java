@@ -69,9 +69,11 @@ public class RecipeServiceImpl implements RecipeService {
             dimension = DIMENSION_TOTAL;
         }
         String cacheKey = resolveCacheKey(dimension);
+        String stampKey = cacheKey + ":stamp";
 
         Boolean hasKey = redisTemplate.hasKey(cacheKey);
-        if (Boolean.TRUE.equals(hasKey)) {
+        Boolean hasStamp = redisTemplate.hasKey(stampKey);
+        if (Boolean.TRUE.equals(hasKey) || Boolean.TRUE.equals(hasStamp)) {
             Set<ZSetOperations.TypedTuple<Object>> cached = redisTemplate.opsForZSet()
                     .reverseRangeWithScores(cacheKey, 0, 9);
             if (cached != null && !cached.isEmpty()) {
@@ -115,7 +117,7 @@ public class RecipeServiceImpl implements RecipeService {
     }
 
     private void cacheHotRecipes(String cacheKey, List<Recipe> recipes) {
-        redisTemplate.delete(cacheKey);
+        redisTemplate.delete(List.of(cacheKey, cacheKey + ":stamp"));
         if (recipes != null && !recipes.isEmpty()) {
             recipes.forEach(recipe -> {
                 redisTemplate.opsForZSet().add(cacheKey, recipe,

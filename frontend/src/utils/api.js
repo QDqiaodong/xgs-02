@@ -22,7 +22,8 @@ api.interceptors.response.use(
 )
 
 export const recipeApi = {
-  getHotRecipes: (dimension = 'total') => api.get('/recipes/hot', { params: { dimension } }),
+  getHotRecipes: (dimension = 'total') =>
+    api.get('/recipes/hot', { params: { dimension } }).then((result) => result?.data || []),
   getRecipes: (params) => api.get('/recipes', { params }),
   getRecipeDetail: (id) => api.get(`/recipes/${id}`),
   createRecipe: (data) => api.post('/recipes', data),
