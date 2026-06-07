@@ -57,12 +57,19 @@
           <div class="spinner"></div>
         </div>
         <template v-else>
-          <div v-if="hotLayout === 'grid'" class="recipe-grid">
-            <RecipeCard v-for="recipe in displayHotRecipes" :key="recipe.id" :recipe="recipe" mode="grid" />
+          <div v-if="displayHotRecipes.length === 0 && loadedHotDimensions.has(hotDimension)" class="empty-state">
+            <div class="empty-icon">🔥</div>
+            <h3>该时段暂无热门菜谱</h3>
+            <p>试试切换其他时间维度查看</p>
           </div>
-          <Waterfall v-else :items="displayHotRecipes" :columns="4" v-slot="{ item }">
-            <RecipeCard :recipe="item" mode="waterfall" />
-          </Waterfall>
+          <template v-else>
+            <div v-if="hotLayout === 'grid'" class="recipe-grid">
+              <RecipeCard v-for="recipe in displayHotRecipes" :key="recipe.id" :recipe="recipe" mode="grid" />
+            </div>
+            <Waterfall v-else :items="displayHotRecipes" :columns="4" v-slot="{ item }">
+              <RecipeCard :recipe="item" mode="waterfall" />
+            </Waterfall>
+          </template>
         </template>
         <div v-if="loadingMore" class="loading loading-more">
           <div class="spinner"></div>
@@ -136,8 +143,9 @@ const hotDimension = ref('monthly')
 const pageSize = 4
 const hotSectionRef = ref(null)
 const hotRecipesMap = ref({})
+const loadedHotDimensions = ref(new Set())
 
-const allHotRecipes = ref([
+const mockHotRecipes = [
   { id: 1, title: '红烧五花肉', description: '经典家常菜，肥而不腻，入口即化', coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=400&h=300&fit=crop', difficulty: 2, cookTime: 60, tags: ['川菜', '家常菜'], author: '美食达人', favoriteCount: 1286 },
   { id: 2, title: '番茄炒蛋', description: '最简单也最困难的国民家常菜', coverImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=450&fit=crop', difficulty: 1, cookTime: 15, tags: ['家常菜', '快手菜'], author: '小厨神', favoriteCount: 2341 },
   { id: 3, title: '宫保鸡丁', description: '川菜经典，鸡肉滑嫩，花生酥脆', coverImage: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?w=400&h=280&fit=crop', difficulty: 2, cookTime: 30, tags: ['川菜', '经典'], author: '川菜大师', favoriteCount: 1892 },
@@ -146,14 +154,24 @@ const allHotRecipes = ref([
   { id: 6, title: '白切鸡', description: '粤菜经典，皮爽肉滑，原汁原味', coverImage: 'https://images.unsplash.com/photo-1598103442097-8b74394b95c6?w=400&h=320&fit=crop', difficulty: 2, cookTime: 45, tags: ['粤菜', '经典', '宴请'], author: '广东阿婆', favoriteCount: 1456 },
   { id: 7, title: '糖醋排骨', description: '酸甜可口，老少皆宜，外酥里嫩', coverImage: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=380&fit=crop', difficulty: 2, cookTime: 40, tags: ['家常菜', '浙菜', '晚餐'], author: '巧手妈妈', favoriteCount: 1789 },
   { id: 8, title: '水煮鱼', description: '麻辣鲜香，鱼片滑嫩，香辣过瘾', coverImage: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&h=420&fit=crop', difficulty: 3, cookTime: 50, tags: ['川菜', '海鲜', '夜宵'], author: '辣味人生', favoriteCount: 1234 }
-])
+]
+
+const allHotRecipes = ref([])
 
 const displayHotRecipes = computed(() => {
+  const source = loadedHotDimensions.value.has(hotDimension.value)
+    ? (hotRecipesMap.value[hotDimension.value] || [])
+    : allHotRecipes.value.length > 0 ? allHotRecipes.value : mockHotRecipes
   const count = hotPage.value * pageSize
-  return allHotRecipes.value.slice(0, Math.min(count, allHotRecipes.value.length))
+  return source.slice(0, Math.min(count, source.length))
 })
 
-const hasMoreHot = computed(() => displayHotRecipes.value.length < allHotRecipes.value.length)
+const hasMoreHot = computed(() => {
+  const source = loadedHotDimensions.value.has(hotDimension.value)
+    ? (hotRecipesMap.value[hotDimension.value] || [])
+    : allHotRecipes.value.length > 0 ? allHotRecipes.value : mockHotRecipes
+  return displayHotRecipes.value.length < source.length
+})
 
 const categories = ref([
   { value: '川菜', label: '川菜', icon: '🌶️', count: 128 },
@@ -197,25 +215,40 @@ onBeforeUnmount(() => {
 })
 
 const changeHotDimension = async (dimension) => {
+  if (hotDimension.value === dimension) return
   hotDimension.value = dimension
   hotPage.value = 1
   await loadHotRecipes(dimension)
 }
 
 const loadHotRecipes = async (dimension = hotDimension.value) => {
-  if (hotRecipesMap.value[dimension]) {
-    allHotRecipes.value = hotRecipesMap.value[dimension]
+  if (loadedHotDimensions.value.has(dimension)) {
+    allHotRecipes.value = hotRecipesMap.value[dimension] || []
     return
   }
-  const data = await recipeApi.getHotRecipes(dimension)
-  if (data && data.length) {
-    const formatted = data.map(r => ({
+  try {
+    const data = await recipeApi.getHotRecipes(dimension)
+    const formatted = (data || []).map(r => ({
       ...r,
       tags: r.tags ? r.tags.split(',') : []
     }))
-    hotRecipesMap.value[dimension] = formatted
+    hotRecipesMap.value = {
+      ...hotRecipesMap.value,
+      [dimension]: formatted
+    }
+    loadedHotDimensions.value = new Set([...loadedHotDimensions.value, dimension])
     allHotRecipes.value = formatted
-    store.setHotRecipes(formatted)
+    if (formatted.length > 0) {
+      store.setHotRecipes(formatted)
+    }
+  } catch (e) {
+    console.log('热门榜单加载失败，使用模拟数据')
+    loadedHotDimensions.value = new Set([...loadedHotDimensions.value, dimension])
+    hotRecipesMap.value = {
+      ...hotRecipesMap.value,
+      [dimension]: []
+    }
+    allHotRecipes.value = []
   }
 }
 
@@ -363,6 +396,28 @@ const filterByCategory = (category) => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 24px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  background: white;
+  border-radius: var(--radius-md);
+
+  .empty-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+  }
+
+  h3 {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+
+  p {
+    color: var(--text-secondary);
+    margin-bottom: 0;
+  }
 }
 
 .category-section {

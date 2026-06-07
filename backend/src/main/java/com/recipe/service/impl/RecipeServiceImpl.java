@@ -30,16 +30,33 @@ public class RecipeServiceImpl implements RecipeService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
 
-    private static final String HOT_RECIPE_KEY_WEEKLY = "recipe:hot:weekly";
-    private static final String HOT_RECIPE_KEY_MONTHLY = "recipe:hot:monthly";
-    private static final String HOT_RECIPE_KEY_TOTAL = "recipe:hot:total";
+    private static final String HOT_RECIPE_KEY_PREFIX = "recipe:rank:v2:";
+    private static final String HOT_RECIPE_KEY_WEEKLY = HOT_RECIPE_KEY_PREFIX + "weekly";
+    private static final String HOT_RECIPE_KEY_MONTHLY = HOT_RECIPE_KEY_PREFIX + "monthly";
+    private static final String HOT_RECIPE_KEY_TOTAL = HOT_RECIPE_KEY_PREFIX + "total";
 
     private static final String DIMENSION_WEEKLY = "weekly";
     private static final String DIMENSION_MONTHLY = "monthly";
     private static final String DIMENSION_TOTAL = "total";
+    private static final List<String> VALID_DIMENSIONS = List.of(DIMENSION_WEEKLY, DIMENSION_MONTHLY, DIMENSION_TOTAL);
+
+    private static final String OLD_HOT_RECIPE_KEY_LEGACY = "recipe:hot:monthly";
 
     @Value("${recipe.cache.hot-recipe-expire:86400}")
     private Long hotRecipeExpire;
+
+    @jakarta.annotation.PostConstruct
+    public void cleanLegacyCacheKeys() {
+        try {
+            redisTemplate.delete(OLD_HOT_RECIPE_KEY_LEGACY);
+            redisTemplate.delete("recipe:hot:weekly");
+            redisTemplate.delete("recipe:hot:monthly");
+            redisTemplate.delete("recipe:hot:total");
+            log.info("已清理旧版热门菜谱缓存key");
+        } catch (Exception e) {
+            log.warn("清理旧版缓存key失败", e);
+        }
+    }
 
     @Override
     public List<Recipe> getHotRecipes() {
@@ -48,22 +65,28 @@ public class RecipeServiceImpl implements RecipeService {
 
     @Override
     public List<Recipe> getHotRecipes(String dimension) {
+        if (!VALID_DIMENSIONS.contains(dimension)) {
+            dimension = DIMENSION_TOTAL;
+        }
         String cacheKey = resolveCacheKey(dimension);
 
-        Set<ZSetOperations.TypedTuple<Object>> cached = redisTemplate.opsForZSet()
-                .reverseRangeWithScores(cacheKey, 0, 9);
-
-        if (cached != null && !cached.isEmpty()) {
-            return cached.stream()
-                    .map(tuple -> {
-                        try {
-                            return objectMapper.convertValue(tuple.getValue(), Recipe.class);
-                        } catch (Exception e) {
-                            return null;
-                        }
-                    })
-                    .filter(r -> r != null)
-                    .toList();
+        Boolean hasKey = redisTemplate.hasKey(cacheKey);
+        if (Boolean.TRUE.equals(hasKey)) {
+            Set<ZSetOperations.TypedTuple<Object>> cached = redisTemplate.opsForZSet()
+                    .reverseRangeWithScores(cacheKey, 0, 9);
+            if (cached != null && !cached.isEmpty()) {
+                return cached.stream()
+                        .map(tuple -> {
+                            try {
+                                return objectMapper.convertValue(tuple.getValue(), Recipe.class);
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        })
+                        .filter(r -> r != null)
+                        .toList();
+            }
+            return List.of();
         }
 
         List<Recipe> recipes = fetchHotRecipesByDimension(dimension, 10);
@@ -92,9 +115,14 @@ public class RecipeServiceImpl implements RecipeService {
     }
 
     private void cacheHotRecipes(String cacheKey, List<Recipe> recipes) {
-        recipes.forEach(recipe -> {
-            redisTemplate.opsForZSet().add(cacheKey, recipe, recipe.getFavoriteCount() != null ? recipe.getFavoriteCount() : 0);
-        });
+        redisTemplate.delete(cacheKey);
+        if (recipes != null && !recipes.isEmpty()) {
+            recipes.forEach(recipe -> {
+                redisTemplate.opsForZSet().add(cacheKey, recipe,
+                        recipe.getFavoriteCount() != null ? recipe.getFavoriteCount().doubleValue() : 0D);
+            });
+        }
+        redisTemplate.opsForValue().set(cacheKey + ":stamp", System.currentTimeMillis(), hotRecipeExpire, TimeUnit.SECONDS);
         redisTemplate.expire(cacheKey, hotRecipeExpire, TimeUnit.SECONDS);
     }
 
@@ -103,17 +131,14 @@ public class RecipeServiceImpl implements RecipeService {
         log.info("开始刷新热门菜谱缓存...");
 
         List<Recipe> weeklyRecipes = recipeMapper.selectWeeklyHotRecipes(10);
-        redisTemplate.delete(HOT_RECIPE_KEY_WEEKLY);
         cacheHotRecipes(HOT_RECIPE_KEY_WEEKLY, weeklyRecipes);
         log.info("周榜缓存刷新完成，共{}条", weeklyRecipes.size());
 
         List<Recipe> monthlyRecipes = recipeMapper.selectMonthlyHotRecipes(10);
-        redisTemplate.delete(HOT_RECIPE_KEY_MONTHLY);
         cacheHotRecipes(HOT_RECIPE_KEY_MONTHLY, monthlyRecipes);
         log.info("月榜缓存刷新完成，共{}条", monthlyRecipes.size());
 
         List<Recipe> totalRecipes = recipeMapper.selectHotRecipes(10);
-        redisTemplate.delete(HOT_RECIPE_KEY_TOTAL);
         cacheHotRecipes(HOT_RECIPE_KEY_TOTAL, totalRecipes);
         log.info("总榜缓存刷新完成，共{}条", totalRecipes.size());
 

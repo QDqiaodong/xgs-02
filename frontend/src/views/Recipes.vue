@@ -160,6 +160,7 @@ const layout = ref('grid')
 const pageSize = 4
 const currentPage = ref(1)
 const hotRecipesMap = ref({})
+const loadedHotDimensions = ref(new Set())
 
 const filters = ref({
   cuisine: '',
@@ -192,6 +193,20 @@ const allRecipes = ref([
 ])
 
 const allFilteredRecipes = computed(() => {
+  if (sortBy.value === 'hot' && loadedHotDimensions.value.has(hotDimension.value)) {
+    const hotList = hotRecipesMap.value[hotDimension.value] || []
+    return hotList.filter(r => {
+      if (filters.value.cuisine && !r.tags?.includes(filters.value.cuisine)) return false
+      if (filters.value.scene && !r.tags?.includes(filters.value.scene)) return false
+      if (filters.value.difficulty && r.difficulty !== parseInt(filters.value.difficulty)) return false
+      if (filters.value.keyword) {
+        const kw = filters.value.keyword.toLowerCase()
+        if (!r.title?.toLowerCase().includes(kw) && !r.description?.toLowerCase().includes(kw)) return false
+      }
+      return true
+    })
+  }
+
   let result = [...allRecipes.value]
 
   if (filters.value.cuisine) {
@@ -215,23 +230,6 @@ const allFilteredRecipes = computed(() => {
   }
 
   if (sortBy.value === 'hot') {
-    const hotList = hotRecipesMap.value[hotDimension.value]
-    if (hotList && hotList.length > 0) {
-      const hotIds = new Set(hotList.map(r => r.id))
-      const filteredHot = hotList.filter(r => {
-        if (filters.value.cuisine && !r.tags?.includes(filters.value.cuisine)) return false
-        if (filters.value.scene && !r.tags?.includes(filters.value.scene)) return false
-        if (filters.value.difficulty && r.difficulty !== parseInt(filters.value.difficulty)) return false
-        if (filters.value.keyword) {
-          const kw = filters.value.keyword.toLowerCase()
-          if (!r.title?.toLowerCase().includes(kw) && !r.description?.toLowerCase().includes(kw)) return false
-        }
-        return true
-      })
-      if (filteredHot.length > 0) {
-        return filteredHot
-      }
-    }
     result.sort((a, b) => b.favoriteCount - a.favoriteCount)
   } else {
     result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -257,30 +255,41 @@ const handleLayoutChange = (newLayout) => {
 
 const handleSortChange = (sort) => {
   sortBy.value = sort
+  currentPage.value = 1
   if (sort === 'hot') {
     loadHotRecipes(hotDimension.value)
   }
 }
 
 const changeHotDimension = async (dimension) => {
+  if (hotDimension.value === dimension) return
   hotDimension.value = dimension
+  currentPage.value = 1
   await loadHotRecipes(dimension)
 }
 
 const loadHotRecipes = async (dimension) => {
-  if (hotRecipesMap.value[dimension]) {
+  if (loadedHotDimensions.value.has(dimension)) {
     return
   }
   try {
     const data = await recipeApi.getHotRecipes(dimension)
-    if (data && data.length) {
-      hotRecipesMap.value[dimension] = data.map(r => ({
-        ...r,
-        tags: r.tags ? r.tags.split(',') : []
-      }))
+    const formatted = (data || []).map(r => ({
+      ...r,
+      tags: r.tags ? r.tags.split(',') : []
+    }))
+    hotRecipesMap.value = {
+      ...hotRecipesMap.value,
+      [dimension]: formatted
     }
+    loadedHotDimensions.value = new Set([...loadedHotDimensions.value, dimension])
   } catch (e) {
     console.log('热门榜单加载失败，使用模拟数据')
+    loadedHotDimensions.value = new Set([...loadedHotDimensions.value, dimension])
+    hotRecipesMap.value = {
+      ...hotRecipesMap.value,
+      [dimension]: []
+    }
   }
 }
 
