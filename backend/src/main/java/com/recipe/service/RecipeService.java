@@ -27,4 +27,6 @@ public interface RecipeService {
     List<Recipe> getDrafts();
 
     List<Recipe> getUserRecipes();
+
+    void updateHotRecipeCache(Long recipeId, Integer delta);
 }

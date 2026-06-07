@@ -148,20 +148,68 @@ public class RecipeServiceImpl implements RecipeService {
     }
 
     @Override
+    public void updateHotRecipeCache(Long recipeId, Integer delta) {
+        Recipe recipe = recipeMapper.selectById(recipeId);
+        if (recipe == null) {
+            return;
+        }
+
+        String[] cacheKeys = new String[]{
+                HOT_RECIPE_KEY_TOTAL,
+                HOT_RECIPE_KEY_WEEKLY,
+                HOT_RECIPE_KEY_MONTHLY
+        };
+
+        for (String cacheKey : cacheKeys) {
+            try {
+                Boolean hasKey = redisTemplate.hasKey(cacheKey);
+                if (Boolean.TRUE.equals(hasKey)) {
+                    Set<ZSetOperations.TypedTuple<Object>> tuples = redisTemplate.opsForZSet()
+                            .rangeWithScores(cacheKey, 0, -1);
+                    if (tuples != null) {
+                        for (ZSetOperations.TypedTuple<Object> tuple : tuples) {
+                            Object value = tuple.getValue();
+                            if (value != null) {
+                                try {
+                                    Recipe cachedRecipe = objectMapper.convertValue(value, Recipe.class);
+                                    if (cachedRecipe != null && recipeId.equals(cachedRecipe.getId())) {
+                                        Double currentScore = tuple.getScore() != null ? tuple.getScore() : 0D;
+                                        Double newScore = Math.max(0, currentScore + delta);
+                                        redisTemplate.opsForZSet().remove(cacheKey, value);
+                                        cachedRecipe.setFavoriteCount(recipe.getFavoriteCount());
+                                        redisTemplate.opsForZSet().add(cacheKey, cachedRecipe, newScore);
+                                        break;
+                                    }
+                                } catch (Exception e) {
+                                    log.warn("转换缓存菜谱对象失败", e);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("更新热门菜谱缓存失败, cacheKey={}, recipeId={}", cacheKey, recipeId, e);
+            }
+        }
+    }
+
+    @Override
     public Page<Recipe> getRecipePage(Integer page, Integer size, String keyword, String cuisine, String scene, Integer difficulty) {
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            return searchRecipesWithWeight(page, size, keyword, cuisine, scene, difficulty);
+        }
+
         LambdaQueryWrapper<Recipe> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Recipe::getStatus, 1)
                 .eq(Recipe::getIsDraft, 0)
                 .eq(Recipe::getDeleted, 0);
 
-        if (keyword != null && !keyword.isEmpty()) {
-            wrapper.like(Recipe::getTitle, keyword)
-                    .or()
-                    .like(Recipe::getDescription, keyword);
-        }
-
         if (cuisine != null && !cuisine.isEmpty()) {
             wrapper.like(Recipe::getTags, cuisine);
+        }
+
+        if (scene != null && !scene.isEmpty()) {
+            wrapper.like(Recipe::getTags, scene);
         }
 
         if (difficulty != null) {
@@ -171,6 +219,23 @@ public class RecipeServiceImpl implements RecipeService {
         wrapper.orderByDesc(Recipe::getFavoriteCount);
 
         return recipeMapper.selectPage(new Page<>(page, size), wrapper);
+    }
+
+    private Page<Recipe> searchRecipesWithWeight(Integer page, Integer size, String keyword,
+                                                  String cuisine, String scene, Integer difficulty) {
+        List<Recipe> allRecipes = recipeMapper.searchRecipesWithWeight(keyword, cuisine, scene, difficulty);
+
+        int total = allRecipes.size();
+        int fromIndex = (page - 1) * size;
+        int toIndex = Math.min(fromIndex + size, total);
+
+        Page<Recipe> result = new Page<>(page, size, total);
+        if (fromIndex >= total) {
+            result.setRecords(List.of());
+            return result;
+        }
+        result.setRecords(allRecipes.subList(fromIndex, toIndex));
+        return result;
     }
 
     @Override
