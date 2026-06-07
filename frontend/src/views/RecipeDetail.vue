@@ -63,7 +63,61 @@
 
       <div class="detail-content">
         <div class="ingredients-section section-card">
-          <h2 class="section-title">🥬 食材清单</h2>
+          <div class="ingredients-header">
+            <h2 class="section-title">🥬 食材清单</h2>
+            <div class="servings-control">
+              <div class="servings-label">
+                <span class="servings-icon">👥</span>
+                <span>份数</span>
+              </div>
+              <div class="servings-controls-wrapper">
+                <button 
+                  class="servings-btn minus" 
+                  @click="decreaseServings"
+                  :disabled="currentServings <= minServings"
+                >−</button>
+                <input 
+                  type="number" 
+                  v-model.number="currentServings" 
+                  class="servings-input"
+                  :min="minServings"
+                  :max="maxServings"
+                  @change="clampServings"
+                />
+                <button 
+                  class="servings-btn plus" 
+                  @click="increaseServings"
+                  :disabled="currentServings >= maxServings"
+                >+</button>
+              </div>
+              <div class="servings-slider-wrapper">
+                <input 
+                  type="range" 
+                  v-model.number="currentServings" 
+                  :min="minServings" 
+                  :max="maxServings" 
+                  step="1"
+                  class="servings-slider"
+                />
+                <div class="slider-marks">
+                  <span>{{ minServings }}</span>
+                  <span>{{ Math.round((minServings + maxServings) / 2) }}</span>
+                  <span>{{ maxServings }}</span>
+                </div>
+              </div>
+              <button 
+                class="reset-btn" 
+                @click="resetServings"
+                :disabled="currentServings === originalServings"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+                恢复原始
+              </button>
+            </div>
+          </div>
           <table class="ingredients-table">
             <thead>
               <tr>
@@ -73,9 +127,13 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, index) in recipe.ingredients" :key="index">
+              <tr v-for="(item, index) in scaledIngredients" :key="index">
                 <td>{{ item.name }}</td>
-                <td>{{ item.amount }}</td>
+                <td class="amount-cell">
+                  <span class="amount-value" :class="{ 'amount-changed': currentServings !== originalServings }">
+                    {{ item.amount }}
+                  </span>
+                </td>
                 <td>{{ item.note || '-' }}</td>
               </tr>
             </tbody>
@@ -120,7 +178,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
@@ -132,7 +190,159 @@ const store = useRecipeStore()
 const recipe = ref(null)
 const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&h=500&fit=crop'
 
+const originalServings = ref(1)
+const currentServings = ref(1)
+const minServings = 1
+const maxServings = 20
+
 const isFavorited = computed(() => store.isFavorite(route.params.id))
+
+const parseAmount = (amountStr) => {
+  if (!amountStr || amountStr === '适量') {
+    return { value: null, unit: amountStr || '适量', isFraction: false }
+  }
+  
+  const fractionMap = {
+    '½': 0.5, '¼': 0.25, '¾': 0.75,
+    '⅓': 0.333, '⅔': 0.667,
+    '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8,
+    '⅙': 0.167, '⅚': 0.833,
+    '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875
+  }
+  
+  let trimmed = amountStr.trim()
+  
+  for (const [frac, val] of Object.entries(fractionMap)) {
+    if (trimmed.startsWith(frac)) {
+      const rest = trimmed.slice(frac.length).trim()
+      return { value: val, unit: rest, isFraction: true }
+    }
+  }
+  
+  const mixedFractionMatch = trimmed.match(/^(\d+)\s*(½|¼|¾|⅓|⅔|⅕|⅖|⅗|⅘|⅙|⅚|⅛|⅜|⅝|⅞)\s*(.*)$/)
+  if (mixedFractionMatch) {
+    const intVal = parseInt(mixedFractionMatch[1])
+    const fracVal = fractionMap[mixedFractionMatch[2]]
+    const unit = mixedFractionMatch[3].trim()
+    return { value: intVal + fracVal, unit, isFraction: true }
+  }
+  
+  const match = trimmed.match(/^(\d+(?:\.\d+)?|\.\d+)\s*(.*)$/)
+  if (match) {
+    return { value: parseFloat(match[1]), unit: match[2].trim(), isFraction: false }
+  }
+  
+  return { value: null, unit: amountStr, isFraction: false }
+}
+
+const formatNumberSmart = (num) => {
+  if (num === null || num === undefined) return ''
+  
+  if (Math.abs(num - Math.round(num)) < 0.0001) {
+    return Math.round(num).toString()
+  }
+  
+  const fractionMap = [
+    { val: 0, str: '' },
+    { val: 0.125, str: '⅛' },
+    { val: 0.167, str: '⅙' },
+    { val: 0.2, str: '⅕' },
+    { val: 0.25, str: '¼' },
+    { val: 0.333, str: '⅓' },
+    { val: 0.375, str: '⅜' },
+    { val: 0.4, str: '⅖' },
+    { val: 0.5, str: '½' },
+    { val: 0.6, str: '⅗' },
+    { val: 0.625, str: '⅝' },
+    { val: 0.667, str: '⅔' },
+    { val: 0.75, str: '¾' },
+    { val: 0.8, str: '⅘' },
+    { val: 0.833, str: '⅚' },
+    { val: 0.875, str: '⅞' }
+  ]
+  
+  const intPart = Math.floor(num)
+  const fracPart = num - intPart
+  
+  let bestMatch = fractionMap[0]
+  let minDiff = Math.abs(fracPart)
+  
+  for (const frac of fractionMap) {
+    const diff = Math.abs(fracPart - frac.val)
+    if (diff < minDiff) {
+      minDiff = diff
+      bestMatch = frac
+    }
+  }
+  
+  if (minDiff < 0.08) {
+    if (intPart === 0) {
+      return bestMatch.str || '0'
+    }
+    return bestMatch.str ? `${intPart}${bestMatch.str}` : intPart.toString()
+  }
+  
+  if (num < 10) {
+    return num.toFixed(1).replace(/\.0$/, '')
+  }
+  
+  return Math.round(num).toString()
+}
+
+const scaledIngredients = computed(() => {
+  if (!recipe.value || !recipe.value.ingredients) return []
+  
+  const ratio = currentServings.value / originalServings.value
+  
+  if (Math.abs(ratio - 1) < 0.0001) {
+    return recipe.value.ingredients
+  }
+  
+  return recipe.value.ingredients.map(item => {
+    const parsed = parseAmount(item.amount)
+    
+    if (parsed.value === null) {
+      return { ...item }
+    }
+    
+    const newValue = parsed.value * ratio
+    const formattedValue = formatNumberSmart(newValue)
+    const newAmount = parsed.unit ? `${formattedValue}${parsed.unit}` : formattedValue
+    
+    return {
+      ...item,
+      amount: newAmount
+    }
+  })
+})
+
+const increaseServings = () => {
+  if (currentServings.value < maxServings) {
+    currentServings.value++
+  }
+}
+
+const decreaseServings = () => {
+  if (currentServings.value > minServings) {
+    currentServings.value--
+  }
+}
+
+const clampServings = () => {
+  if (currentServings.value < minServings) {
+    currentServings.value = minServings
+  } else if (currentServings.value > maxServings) {
+    currentServings.value = maxServings
+  }
+  currentServings.value = Math.round(currentServings.value)
+}
+
+const resetServings = () => {
+  currentServings.value = originalServings.value
+  ElMessage.success('已恢复原始份数')
+}
+
+watch(currentServings, clampServings)
 
 const getDifficultyLabel = (level) => {
   const labels = { 1: '简单', 2: '中等', 3: '困难' }
@@ -297,6 +507,194 @@ const shareRecipe = () => {
   margin-bottom: 24px;
 }
 
+.ingredients-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 24px;
+
+  .section-title {
+    margin-bottom: 0;
+  }
+}
+
+.servings-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  min-width: 320px;
+}
+
+.servings-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+
+  .servings-icon {
+    font-size: 18px;
+  }
+}
+
+.servings-controls-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.servings-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: var(--primary-color);
+    color: white;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  &.minus {
+    border-right: 1px solid var(--border-color);
+  }
+
+  &.plus {
+    border-left: 1px solid var(--border-color);
+  }
+}
+
+.servings-input {
+  width: 60px;
+  height: 36px;
+  text-align: center;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--primary-color);
+  background: transparent;
+  -moz-appearance: textfield;
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+.servings-slider-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.servings-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border-color);
+  border-radius: 3px;
+  outline: none;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(230, 126, 34, 0.4);
+    transition: transform 0.2s ease;
+
+    &:hover {
+      transform: scale(1.15);
+    }
+  }
+
+  &::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 6px rgba(230, 126, 34, 0.4);
+  }
+}
+
+.slider-marks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-light);
+}
+
+.reset-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: white;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.amount-cell {
+  .amount-value {
+    transition: color 0.3s ease;
+
+    &.amount-changed {
+      color: var(--primary-color);
+      font-weight: 600;
+    }
+  }
+}
+
 .ingredients-table {
   width: 100%;
   border-collapse: collapse;
@@ -443,6 +841,29 @@ const shareRecipe = () => {
     }
   }
 
+  .ingredients-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .servings-control {
+    min-width: auto;
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .servings-slider-wrapper {
+    min-width: 100%;
+    order: 5;
+  }
+
+  .reset-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 14px;
+  }
+
   .steps-list {
     gap: 20px;
   }
@@ -510,6 +931,23 @@ const shareRecipe = () => {
   .section-title {
     font-size: 18px;
     margin-bottom: 16px;
+  }
+
+  .servings-control {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .servings-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+
+  .servings-input {
+    width: 50px;
+    height: 32px;
+    font-size: 15px;
   }
 
   .action-buttons {
