@@ -27,12 +27,14 @@ public class FavoriteServiceImpl implements FavoriteService {
 
     private static final int MAX_RETRY = 3;
     private static final long RETRY_INTERVAL_MS = 100;
+    private static final Long DEFAULT_USER_ID = 1L;
 
     @Override
     public List<Recipe> getFavorites() {
         List<Long> recipeIds = favoriteMapper.selectList(
                 new LambdaQueryWrapper<Favorite>()
                         .select(Favorite::getRecipeId)
+                        .eq(Favorite::getUserId, DEFAULT_USER_ID)
                         .eq(Favorite::getDeleted, 0)
         ).stream().map(Favorite::getRecipeId).collect(Collectors.toList());
 
@@ -51,30 +53,32 @@ public class FavoriteServiceImpl implements FavoriteService {
         }
 
         LambdaQueryWrapper<Favorite> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Favorite::getRecipeId, recipeId)
+        wrapper.eq(Favorite::getUserId, DEFAULT_USER_ID)
+                .eq(Favorite::getRecipeId, recipeId)
                 .eq(Favorite::getDeleted, 0);
 
         if (favoriteMapper.selectCount(wrapper) > 0) {
-            log.info("收藏操作幂等命中，recipeId={} 已收藏", recipeId);
+            log.info("收藏操作幂等命中，userId={}, recipeId={} 已收藏", DEFAULT_USER_ID, recipeId);
             return true;
         }
 
         Favorite favorite = new Favorite();
-        favorite.setUserId(1L);
+        favorite.setUserId(DEFAULT_USER_ID);
         favorite.setRecipeId(recipeId);
         int inserted = favoriteMapper.insert(favorite);
         if (inserted <= 0) {
-            log.warn("插入收藏记录失败，recipeId={}", recipeId);
+            log.warn("插入收藏记录失败，userId={}, recipeId={}", DEFAULT_USER_ID, recipeId);
             return false;
         }
 
+        int delta = inserted;
         Recipe recipe = recipeMapper.selectById(recipeId);
         if (recipe != null) {
-            recipe.setFavoriteCount(recipe.getFavoriteCount() == null ? 1 : recipe.getFavoriteCount() + 1);
+            recipe.setFavoriteCount(Math.max(0, (recipe.getFavoriteCount() == null ? 0 : recipe.getFavoriteCount()) + delta));
             recipeMapper.updateById(recipe);
         }
 
-        updateCacheWithRetry(recipeId, 1);
+        updateCacheWithRetry(recipeId, delta);
 
         return true;
     }
@@ -87,27 +91,30 @@ public class FavoriteServiceImpl implements FavoriteService {
         }
 
         LambdaQueryWrapper<Favorite> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Favorite::getRecipeId, recipeId)
+        wrapper.eq(Favorite::getUserId, DEFAULT_USER_ID)
+                .eq(Favorite::getRecipeId, recipeId)
                 .eq(Favorite::getDeleted, 0);
 
-        if (favoriteMapper.selectCount(wrapper) == 0) {
-            log.info("取消收藏操作幂等命中，recipeId={} 未收藏", recipeId);
+        Long existingCount = favoriteMapper.selectCount(wrapper);
+        if (existingCount == null || existingCount == 0) {
+            log.info("取消收藏操作幂等命中，userId={}, recipeId={} 未收藏", DEFAULT_USER_ID, recipeId);
             return true;
         }
 
         int deleted = favoriteMapper.delete(wrapper);
         if (deleted <= 0) {
-            log.warn("删除收藏记录失败，recipeId={}", recipeId);
+            log.warn("删除收藏记录失败，userId={}, recipeId={}", DEFAULT_USER_ID, recipeId);
             return false;
         }
 
+        int delta = -deleted;
         Recipe recipe = recipeMapper.selectById(recipeId);
-        if (recipe != null && recipe.getFavoriteCount() != null && recipe.getFavoriteCount() > 0) {
-            recipe.setFavoriteCount(recipe.getFavoriteCount() - 1);
+        if (recipe != null) {
+            recipe.setFavoriteCount(Math.max(0, (recipe.getFavoriteCount() == null ? 0 : recipe.getFavoriteCount()) + delta));
             recipeMapper.updateById(recipe);
         }
 
-        updateCacheWithRetry(recipeId, -1);
+        updateCacheWithRetry(recipeId, delta);
 
         return true;
     }

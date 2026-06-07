@@ -47,13 +47,13 @@ public interface RecipeMapper extends BaseMapper<Recipe> {
             "  r.title LIKE CONCAT('%', #{keyword}, '%') " +
             "  OR r.description LIKE CONCAT('%', #{keyword}, '%') " +
             "  OR r.tags LIKE CONCAT('%', #{keyword}, '%') " +
-            "  OR r.ingredients LIKE CONCAT('%', #{keyword}, '%') " +
+            "  OR JSON_SEARCH(r.ingredients, 'one', CONCAT('%', #{keyword}, '%'), NULL, '$[*].name') IS NOT NULL " +
             ") " +
             "ORDER BY (" +
             "  CASE WHEN r.title LIKE CONCAT('%', #{keyword}, '%') THEN 10 ELSE 0 END + " +
             "  CASE WHEN r.tags LIKE CONCAT('%', #{keyword}, '%') THEN 5 ELSE 0 END + " +
-            "  CASE WHEN r.description LIKE CONCAT('%', #{keyword}, '%') THEN 3 ELSE 0 END + " +
-            "  CASE WHEN r.ingredients LIKE CONCAT('%', #{keyword}, '%') THEN 4 ELSE 0 END " +
+            "  CASE WHEN JSON_SEARCH(r.ingredients, 'one', CONCAT('%', #{keyword}, '%'), NULL, '$[*].name') IS NOT NULL THEN 4 ELSE 0 END + " +
+            "  CASE WHEN r.description LIKE CONCAT('%', #{keyword}, '%') THEN 3 ELSE 0 END " +
             ") DESC, r.favorite_count DESC " +
             "</script>")
     List<Recipe> searchRecipesWithWeight(@Param("keyword") String keyword,
