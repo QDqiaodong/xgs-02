@@ -53,11 +53,11 @@
           </div>
           <LayoutSwitcher :layout="hotLayout" @change="hotLayout = $event" />
         </div>
-        <div v-if="loading" class="loading">
+        <div v-if="loading || isSwitchingDimension || !loadedHotDimensions.has(hotDimension)" class="loading">
           <div class="spinner"></div>
         </div>
         <template v-else>
-          <div v-if="displayHotRecipes.length === 0 && loadedHotDimensions.has(hotDimension)" class="empty-state">
+          <div v-if="displayHotRecipes.length === 0" class="empty-state">
             <div class="empty-icon">🔥</div>
             <h3>该时段暂无热门菜谱</h3>
             <p>试试切换其他时间维度查看</p>
@@ -138,12 +138,13 @@ const store = useRecipeStore()
 const loading = ref(true)
 const loadingMore = ref(false)
 const hotLayout = ref('grid')
-const hotPage = ref(1)
 const hotDimension = ref('monthly')
 const pageSize = 4
 const hotSectionRef = ref(null)
 const hotRecipesMap = ref({})
 const loadedHotDimensions = ref(new Set())
+const hotPagesMap = ref({})
+const isSwitchingDimension = ref(false)
 
 const mockHotRecipes = [
   { id: 1, title: '红烧五花肉', description: '经典家常菜，肥而不腻，入口即化', coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=400&h=300&fit=crop', difficulty: 2, cookTime: 60, tags: ['川菜', '家常菜'], author: '美食达人', favoriteCount: 1286 },
@@ -156,20 +157,23 @@ const mockHotRecipes = [
   { id: 8, title: '水煮鱼', description: '麻辣鲜香，鱼片滑嫩，香辣过瘾', coverImage: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&h=420&fit=crop', difficulty: 3, cookTime: 50, tags: ['川菜', '海鲜', '夜宵'], author: '辣味人生', favoriteCount: 1234 }
 ]
 
-const allHotRecipes = ref([])
+const getCurrentHotPage = () => hotPagesMap.value[hotDimension.value] || 1
+
+const getCurrentSource = () => {
+  if (loadedHotDimensions.value.has(hotDimension.value)) {
+    return hotRecipesMap.value[hotDimension.value] || []
+  }
+  return []
+}
 
 const displayHotRecipes = computed(() => {
-  const source = loadedHotDimensions.value.has(hotDimension.value)
-    ? (hotRecipesMap.value[hotDimension.value] || [])
-    : allHotRecipes.value.length > 0 ? allHotRecipes.value : mockHotRecipes
-  const count = hotPage.value * pageSize
+  const source = getCurrentSource()
+  const count = getCurrentHotPage() * pageSize
   return source.slice(0, Math.min(count, source.length))
 })
 
 const hasMoreHot = computed(() => {
-  const source = loadedHotDimensions.value.has(hotDimension.value)
-    ? (hotRecipesMap.value[hotDimension.value] || [])
-    : allHotRecipes.value.length > 0 ? allHotRecipes.value : mockHotRecipes
+  const source = getCurrentSource()
   return displayHotRecipes.value.length < source.length
 })
 
@@ -183,16 +187,20 @@ const categories = ref([
 ])
 
 const loadMoreHot = () => {
-  if (loadingMore.value || !hasMoreHot.value) return
+  if (loadingMore.value || !hasMoreHot.value || isSwitchingDimension.value) return
   loadingMore.value = true
   setTimeout(() => {
-    hotPage.value++
+    const currentPage = getCurrentHotPage()
+    hotPagesMap.value = {
+      ...hotPagesMap.value,
+      [hotDimension.value]: currentPage + 1
+    }
     loadingMore.value = false
   }, 600)
 }
 
 const handleScroll = () => {
-  if (!hotSectionRef.value) return
+  if (!hotSectionRef.value || isSwitchingDimension.value) return
   const rect = hotSectionRef.value.getBoundingClientRect()
   if (rect.bottom <= window.innerHeight + 100) {
     loadMoreHot()
@@ -200,6 +208,10 @@ const handleScroll = () => {
 }
 
 onMounted(async () => {
+  hotPagesMap.value = {
+    ...hotPagesMap.value,
+    [hotDimension.value]: 1
+  }
   try {
     await loadHotRecipes(hotDimension.value)
   } catch (e) {
@@ -215,15 +227,22 @@ onBeforeUnmount(() => {
 })
 
 const changeHotDimension = async (dimension) => {
-  if (hotDimension.value === dimension) return
+  if (hotDimension.value === dimension || isSwitchingDimension.value) return
+  isSwitchingDimension.value = true
   hotDimension.value = dimension
-  hotPage.value = 1
-  await loadHotRecipes(dimension)
+  hotPagesMap.value = {
+    ...hotPagesMap.value,
+    [dimension]: hotPagesMap.value[dimension] || 1
+  }
+  try {
+    await loadHotRecipes(dimension)
+  } finally {
+    isSwitchingDimension.value = false
+  }
 }
 
 const loadHotRecipes = async (dimension = hotDimension.value) => {
   if (loadedHotDimensions.value.has(dimension)) {
-    allHotRecipes.value = hotRecipesMap.value[dimension] || []
     return
   }
   try {
@@ -237,18 +256,16 @@ const loadHotRecipes = async (dimension = hotDimension.value) => {
       [dimension]: formatted
     }
     loadedHotDimensions.value = new Set([...loadedHotDimensions.value, dimension])
-    allHotRecipes.value = formatted
     if (formatted.length > 0) {
       store.setHotRecipes(formatted)
     }
   } catch (e) {
-    console.log('热门榜单加载失败，使用模拟数据')
+    console.log('热门榜单加载失败，使用空列表')
     loadedHotDimensions.value = new Set([...loadedHotDimensions.value, dimension])
     hotRecipesMap.value = {
       ...hotRecipesMap.value,
       [dimension]: []
     }
-    allHotRecipes.value = []
   }
 }
 
