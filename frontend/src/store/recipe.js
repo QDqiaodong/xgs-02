@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 
 const STORAGE_KEY = 'recipe-timer-store'
+const TAGS_STORAGE_KEY = 'recipe-favorite-tags-store'
+const RECIPE_TAGS_STORAGE_KEY = 'recipe-favorite-recipe-tags-store'
 
 const loadTimersFromStorage = () => {
   try {
@@ -15,6 +17,30 @@ const loadTimersFromStorage = () => {
   return {}
 }
 
+const loadTagsFromStorage = () => {
+  try {
+    const saved = localStorage.getItem(TAGS_STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load tags from storage', e)
+  }
+  return []
+}
+
+const loadRecipeTagsFromStorage = () => {
+  try {
+    const saved = localStorage.getItem(RECIPE_TAGS_STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load recipe tags from storage', e)
+  }
+  return {}
+}
+
 export const useRecipeStore = defineStore('recipe', () => {
   const recipes = ref([])
   const currentRecipe = ref(null)
@@ -24,6 +50,8 @@ export const useRecipeStore = defineStore('recipe', () => {
   const loading = ref(false)
 
   const timers = ref(loadTimersFromStorage())
+  const tags = ref(loadTagsFromStorage())
+  const recipeTags = ref(loadRecipeTagsFromStorage())
 
   const saveTimersToStorage = () => {
     try {
@@ -33,7 +61,25 @@ export const useRecipeStore = defineStore('recipe', () => {
     }
   }
 
+  const saveTagsToStorage = () => {
+    try {
+      localStorage.setItem(TAGS_STORAGE_KEY, JSON.stringify(tags.value))
+    } catch (e) {
+      console.error('Failed to save tags to storage', e)
+    }
+  }
+
+  const saveRecipeTagsToStorage = () => {
+    try {
+      localStorage.setItem(RECIPE_TAGS_STORAGE_KEY, JSON.stringify(recipeTags.value))
+    } catch (e) {
+      console.error('Failed to save recipe tags to storage', e)
+    }
+  }
+
   watch(timers, saveTimersToStorage, { deep: true })
+  watch(tags, saveTagsToStorage, { deep: true })
+  watch(recipeTags, saveRecipeTagsToStorage, { deep: true })
 
   const getTimerState = (recipeId, stepIndex) => {
     const key = `${recipeId}-${stepIndex}`
@@ -86,7 +132,79 @@ export const useRecipeStore = defineStore('recipe', () => {
 
   const removeFavorite = (id) => {
     favorites.value = favorites.value.filter(f => f.id !== id)
+    delete recipeTags.value[id]
+    saveRecipeTagsToStorage()
   }
+
+  const addTag = (tagName) => {
+    const name = tagName.trim()
+    if (!name) return null
+    if (tags.value.find(t => t.name === name)) {
+      return tags.value.find(t => t.name === name)
+    }
+    const newTag = {
+      id: Date.now().toString(),
+      name,
+      color: getRandomTagColor()
+    }
+    tags.value.push(newTag)
+    return newTag
+  }
+
+  const renameTag = (tagId, newName) => {
+    const name = newName.trim()
+    if (!name) return false
+    const tag = tags.value.find(t => t.id === tagId)
+    if (!tag) return false
+    if (tags.value.find(t => t.name === name && t.id !== tagId)) {
+      return false
+    }
+    tag.name = name
+    return true
+  }
+
+  const deleteTag = (tagId) => {
+    tags.value = tags.value.filter(t => t.id !== tagId)
+    Object.keys(recipeTags.value).forEach(recipeId => {
+      recipeTags.value[recipeId] = recipeTags.value[recipeId].filter(id => id !== tagId)
+    })
+  }
+
+  const getRandomTagColor = () => {
+    const colors = [
+      '#e67e22', '#27ae60', '#3498db', '#9b59b6',
+      '#e74c3c', '#1abc9c', '#f39c12', '#34495e'
+    ]
+    return colors[Math.floor(Math.random() * colors.length)]
+  }
+
+  const addTagToRecipe = (recipeId, tagId) => {
+    if (!recipeTags.value[recipeId]) {
+      recipeTags.value[recipeId] = []
+    }
+    if (!recipeTags.value[recipeId].includes(tagId)) {
+      recipeTags.value[recipeId].push(tagId)
+    }
+  }
+
+  const removeTagFromRecipe = (recipeId, tagId) => {
+    if (recipeTags.value[recipeId]) {
+      recipeTags.value[recipeId] = recipeTags.value[recipeId].filter(id => id !== tagId)
+    }
+  }
+
+  const getRecipeTagIds = computed(() => (recipeId) => {
+    return recipeTags.value[recipeId] || []
+  })
+
+  const getRecipeTags = computed(() => (recipeId) => {
+    const tagIds = recipeTags.value[recipeId] || []
+    return tags.value.filter(t => tagIds.includes(t.id))
+  })
+
+  const getTagRecipeCount = computed(() => (tagId) => {
+    return Object.values(recipeTags.value).filter(ids => ids.includes(tagId)).length
+  })
 
   const setUserRecipes = (data) => {
     userRecipes.value = data
@@ -108,6 +226,8 @@ export const useRecipeStore = defineStore('recipe', () => {
     hotRecipes,
     loading,
     timers,
+    tags,
+    recipeTags,
     getRecipeById,
     isFavorite,
     setRecipes,
@@ -120,6 +240,14 @@ export const useRecipeStore = defineStore('recipe', () => {
     setLoading,
     getTimerState,
     setTimerState,
-    resetTimerState
+    resetTimerState,
+    addTag,
+    renameTag,
+    deleteTag,
+    addTagToRecipe,
+    removeTagFromRecipe,
+    getRecipeTagIds,
+    getRecipeTags,
+    getTagRecipeCount
   }
 })
