@@ -13,6 +13,10 @@
           <router-link to="/favorites" class="nav-link">我的收藏</router-link>
           <router-link to="/my-recipes" class="nav-link">我的菜谱</router-link>
         </nav>
+
+        <router-link to="/profile" class="avatar-link" title="个人中心">
+          <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop" alt="用户头像" class="user-avatar" />
+        </router-link>
         
         <router-link to="/create" class="create-btn">
           <span>+ 发布菜谱</span>
@@ -85,6 +89,29 @@
     background: var(--primary-color);
     border-radius: 1px;
   }
+}
+
+.avatar-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+
+  &:hover {
+    .user-avatar {
+      border-color: var(--primary-color);
+      transform: scale(1.05);
+    }
+  }
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .create-btn {

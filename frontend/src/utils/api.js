@@ -40,6 +40,7 @@ export const recipeApi = {
   removeFavoritesBatch: (ids) => api.delete('/favorites/batch', { data: { ids } }),
   
   getUserRecipes: () => api.get('/user/recipes'),
+  getUserProfile: () => api.get('/user/profile'),
   
   uploadImage: (file) => {
     const formData = new FormData()

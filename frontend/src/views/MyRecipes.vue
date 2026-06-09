@@ -83,7 +83,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
 
@@ -91,7 +91,8 @@ const router = useRouter()
 const store = useRecipeStore()
 
 const loading = ref(false)
-const activeTab = ref('published')
+const route = useRoute()
+const activeTab = ref(route.query.tab === 'draft' ? 'draft' : 'published')
 const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=150&fit=crop'
 
 const publishedRecipes = ref([

@@ -66,4 +66,20 @@ public interface RecipeMapper extends BaseMapper<Recipe> {
             "AND r.id != #{excludeId} " +
             "AND r.tags IS NOT NULL AND r.tags != ''")
     List<Recipe> selectSimilarCandidates(@Param("excludeId") Long excludeId);
+
+    @Select("SELECT COUNT(*) FROM recipe " +
+            "WHERE is_draft = 0 AND status = 1 AND deleted = 0")
+    Integer countPublishedRecipes();
+
+    @Select("SELECT COUNT(*) FROM recipe " +
+            "WHERE is_draft = 1 AND deleted = 0")
+    Integer countDrafts();
+
+    @Select("SELECT COALESCE(SUM(favorite_count), 0) FROM recipe " +
+            "WHERE is_draft = 0 AND status = 1 AND deleted = 0")
+    Integer sumTotalLikes();
+
+    @Select("SELECT COALESCE(SUM(view_count), 0) FROM recipe " +
+            "WHERE is_draft = 0 AND status = 1 AND deleted = 0")
+    Integer sumTotalViews();
 }
