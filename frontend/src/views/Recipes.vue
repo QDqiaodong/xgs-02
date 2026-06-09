@@ -173,9 +173,11 @@ import RecipeCard from '@/components/RecipeCard.vue'
 import LayoutSwitcher from '@/components/LayoutSwitcher.vue'
 import Waterfall from '@/components/Waterfall.vue'
 import { recipeApi } from '@/utils/api'
+import { useRecipeStore } from '@/store/recipe'
 
 const route = useRoute()
 const router = useRouter()
+const store = useRecipeStore()
 
 const loading = ref(true)
 const loadingMore = ref(false)
@@ -186,6 +188,37 @@ const pageSize = 4
 const currentPage = ref(1)
 const hotRecipesMap = ref({})
 const loadedHotDimensions = ref(new Set())
+
+const syncLocalHotRecipesFavoriteCounts = () => {
+  const dimensions = Object.keys(hotRecipesMap.value)
+  dimensions.forEach(dim => {
+    const list = hotRecipesMap.value[dim]
+    if (!list) return
+    list.forEach(recipe => {
+      const storeRecipe = store.hotRecipes.find(r => r.id === recipe.id)
+        || store.recipes.find(r => r.id === recipe.id)
+        || store.favorites.find(r => r.id === recipe.id)
+      if (storeRecipe && typeof storeRecipe.favoriteCount === 'number') {
+        recipe.favoriteCount = storeRecipe.favoriteCount
+      }
+    })
+  })
+  allRecipes.value.forEach(recipe => {
+    const storeRecipe = store.hotRecipes.find(r => r.id === recipe.id)
+      || store.recipes.find(r => r.id === recipe.id)
+      || store.favorites.find(r => r.id === recipe.id)
+    if (storeRecipe && typeof storeRecipe.favoriteCount === 'number') {
+      recipe.favoriteCount = storeRecipe.favoriteCount
+    }
+  })
+}
+
+watch(
+  () => store.favoriteVersion,
+  () => {
+    syncLocalHotRecipesFavoriteCounts()
+  }
+)
 
 const showSuggestions = ref(false)
 const activeSuggestionIndex = ref(-1)

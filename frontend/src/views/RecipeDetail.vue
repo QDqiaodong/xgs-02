@@ -491,12 +491,18 @@ const scrollSimilar = (direction) => {
   }
 }
 
-const toggleFavorite = () => {
+const toggleFavorite = async () => {
   if (isFavorited.value) {
-    store.removeFavorite(route.params.id)
+    await store.removeFavorite(route.params.id)
+    if (recipe.value) {
+      recipe.value.favoriteCount = Math.max(0, (recipe.value.favoriteCount || 0) - 1)
+    }
     ElMessage.success('已取消收藏')
   } else {
-    store.addFavorite(recipe.value)
+    await store.addFavorite(recipe.value)
+    if (recipe.value) {
+      recipe.value.favoriteCount = (recipe.value.favoriteCount || 0) + 1
+    }
     ElMessage.success('收藏成功')
   }
 }

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import { recipeApi } from '@/utils/api'
 
 const STORAGE_KEY = 'recipe-timer-store'
 const TAGS_STORAGE_KEY = 'recipe-favorite-tags-store'
@@ -48,6 +49,7 @@ export const useRecipeStore = defineStore('recipe', () => {
   const userRecipes = ref([])
   const hotRecipes = ref([])
   const loading = ref(false)
+  const favoriteVersion = ref(0)
 
   const timers = ref(loadTimersFromStorage())
   const tags = ref(loadTagsFromStorage())
@@ -124,16 +126,65 @@ export const useRecipeStore = defineStore('recipe', () => {
     favorites.value = data
   }
 
-  const addFavorite = (recipe) => {
-    if (!favorites.value.find(f => f.id === recipe.id)) {
-      favorites.value.unshift(recipe)
+  const updateRecipeFavoriteCount = (recipeId, delta) => {
+    const updateInList = (list) => {
+      const item = list.find(r => r.id === recipeId)
+      if (item) {
+        item.favoriteCount = Math.max(0, (item.favoriteCount || 0) + delta)
+      }
     }
+    updateInList(hotRecipes.value)
+    updateInList(recipes.value)
+    updateInList(userRecipes.value)
+    updateInList(favorites.value)
   }
 
-  const removeFavorite = (id) => {
+  const addFavorite = async (recipe) => {
+    if (favorites.value.find(f => f.id === recipe.id)) {
+      return
+    }
+    try {
+      await recipeApi.addFavorite(recipe.id)
+    } catch (e) {
+      console.warn('调用后端收藏接口失败，继续本地更新', e)
+    }
+    favorites.value.unshift({ ...recipe })
+    updateRecipeFavoriteCount(recipe.id, 1)
+    favoriteVersion.value++
+  }
+
+  const removeFavorite = async (id) => {
+    const existed = favorites.value.find(f => f.id === id)
+    if (!existed) {
+      return
+    }
+    try {
+      await recipeApi.removeFavorite(id)
+    } catch (e) {
+      console.warn('调用后端取消收藏接口失败，继续本地更新', e)
+    }
     favorites.value = favorites.value.filter(f => f.id !== id)
     delete recipeTags.value[id]
     saveRecipeTagsToStorage()
+    updateRecipeFavoriteCount(id, -1)
+    favoriteVersion.value++
+  }
+
+  const removeFavoritesBatch = async (ids) => {
+    const validIds = ids.filter(id => favorites.value.some(f => f.id === id))
+    if (validIds.length === 0) return
+    try {
+      await recipeApi.removeFavoritesBatch(validIds)
+    } catch (e) {
+      console.warn('调用后端批量取消收藏接口失败，继续本地更新', e)
+    }
+    favorites.value = favorites.value.filter(f => !validIds.includes(f.id))
+    validIds.forEach(id => {
+      delete recipeTags.value[id]
+      updateRecipeFavoriteCount(id, -1)
+    })
+    saveRecipeTagsToStorage()
+    favoriteVersion.value++
   }
 
   const addTag = (tagName) => {
@@ -225,6 +276,7 @@ export const useRecipeStore = defineStore('recipe', () => {
     userRecipes,
     hotRecipes,
     loading,
+    favoriteVersion,
     timers,
     tags,
     recipeTags,
@@ -235,6 +287,8 @@ export const useRecipeStore = defineStore('recipe', () => {
     setFavorites,
     addFavorite,
     removeFavorite,
+    removeFavoritesBatch,
+    updateRecipeFavoriteCount,
     setUserRecipes,
     setHotRecipes,
     setLoading,

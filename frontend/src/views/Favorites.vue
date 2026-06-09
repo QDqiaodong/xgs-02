@@ -354,8 +354,9 @@ const removeFavorite = async (id) => {
       type: 'warning'
     })
 
+    await store.removeFavorite(id)
     favorites.value = favorites.value.filter(r => r.id !== id)
-    store.removeFavorite(id)
+    selectedIds.value = selectedIds.value.filter(sid => sid !== id)
     ElMessage.success('已取消收藏')
   } catch {
   }
@@ -369,8 +370,9 @@ const batchRemove = async () => {
       type: 'warning'
     })
 
-    favorites.value = favorites.value.filter(r => !selectedIds.value.includes(r.id))
-    selectedIds.value.forEach(id => store.removeFavorite(id))
+    const idsToRemove = [...selectedIds.value]
+    await store.removeFavoritesBatch(idsToRemove)
+    favorites.value = favorites.value.filter(r => !idsToRemove.includes(r.id))
     selectedIds.value = []
     ElMessage.success('批量取消收藏成功')
   } catch {

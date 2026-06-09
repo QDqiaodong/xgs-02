@@ -125,7 +125,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, computed, onBeforeUnmount } from 'vue'
+import { onMounted, ref, computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRecipeStore } from '@/store/recipe'
 import { recipeApi } from '@/utils/api'
@@ -145,6 +145,31 @@ const hotRecipesMap = ref({})
 const loadedHotDimensions = ref(new Set())
 const hotPagesMap = ref({})
 const isSwitchingDimension = ref(false)
+
+const syncHotRecipeFavoriteCounts = () => {
+  const favoriteMap = new Map()
+  store.favorites.forEach(f => favoriteMap.set(f.id, true))
+  const dimensions = Object.keys(hotRecipesMap.value)
+  dimensions.forEach(dim => {
+    const list = hotRecipesMap.value[dim]
+    if (!list) return
+    list.forEach(recipe => {
+      const storeRecipe = store.hotRecipes.find(r => r.id === recipe.id)
+        || store.recipes.find(r => r.id === recipe.id)
+        || store.favorites.find(r => r.id === recipe.id)
+      if (storeRecipe && typeof storeRecipe.favoriteCount === 'number') {
+        recipe.favoriteCount = storeRecipe.favoriteCount
+      }
+    })
+  })
+}
+
+watch(
+  () => store.favoriteVersion,
+  () => {
+    syncHotRecipeFavoriteCounts()
+  }
+)
 
 const mockHotRecipes = [
   { id: 1, title: '红烧五花肉', description: '经典家常菜，肥而不腻，入口即化', coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=400&h=300&fit=crop', difficulty: 2, cookTime: 60, tags: ['川菜', '家常菜'], author: '美食达人', favoriteCount: 1286 },

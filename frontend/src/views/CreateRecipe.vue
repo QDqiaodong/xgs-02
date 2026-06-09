@@ -98,7 +98,7 @@
         <div class="form-section">
           <h2 class="section-title">👨‍🍳 烹饪步骤</h2>
           <div class="steps-editor">
-            <div v-for="(step, index) in form.steps" :key="index" class="step-editor">
+            <div v-for="(step, index) in form.steps" :key="step._id" class="step-editor">
               <div class="step-header">
                 <span class="step-number">步骤 {{ index + 1 }}</span>
                 <button type="button" class="delete-step" @click="removeStep(index)">
@@ -108,8 +108,25 @@
                   </svg>
                 </button>
               </div>
-              <textarea 
-                v-model="step.content" 
+              <div class="step-image-upload" @click="triggerStepImageUpload(index)">
+                <input
+                  type="file"
+                  :ref="el => setStepFileInput(el, index)"
+                  accept="image/*"
+                  style="display: none"
+                  @change="(e) => handleStepImageUpload(e, index)"
+                />
+                <div v-if="step.image" class="step-image-preview">
+                  <img :src="step.image" :alt="'步骤' + (index + 1)" />
+                  <button type="button" class="remove-step-image" @click.stop="removeStepImage(index)">×</button>
+                </div>
+                <div v-else class="step-upload-placeholder">
+                  <span class="upload-icon">📷</span>
+                  <span>点击上传步骤图片</span>
+                </div>
+              </div>
+              <textarea
+                v-model="step.content"
                 placeholder="描述这个步骤..."
                 rows="3"
               ></textarea>
@@ -153,6 +170,16 @@ const router = useRouter()
 
 const isEdit = ref(!!route.params.id)
 const fileInput = ref(null)
+const stepFileInputs = ref({})
+
+let stepIdCounter = Date.now()
+const genStepId = () => `step_${++stepIdCounter}`
+
+const createStep = (content = '', image = '') => ({
+  _id: genStepId(),
+  content,
+  image
+})
 
 const form = reactive({
   title: '',
@@ -163,7 +190,7 @@ const form = reactive({
   tags: [],
   coverImage: '',
   ingredients: [],
-  steps: [{ content: '' }],
+  steps: [createStep()],
   tips: ''
 })
 
@@ -189,8 +216,8 @@ const loadRecipe = () => {
       { name: '生抽', amount: '2勺', note: '' }
     ],
     steps: [
-      { content: '五花肉切块，冷水下锅焯水' },
-      { content: '锅中放少许油，加入冰糖小火炒出糖色' }
+      createStep('五花肉切块，冷水下锅焯水', ''),
+      createStep('锅中放少许油，加入冰糖小火炒出糖色', '')
     ],
     tips: '炒糖色要用小火'
   }
@@ -207,7 +234,7 @@ const toggleTag = (tag) => {
 }
 
 const addStep = () => {
-  form.steps.push({ content: '' })
+  form.steps.push(createStep())
 }
 
 const removeStep = (index) => {
@@ -237,8 +264,46 @@ const removeImage = () => {
   form.coverImage = ''
 }
 
+const setStepFileInput = (el, index) => {
+  if (el) {
+    stepFileInputs.value[index] = el
+  }
+}
+
+const triggerStepImageUpload = (index) => {
+  const input = stepFileInputs.value[index]
+  if (input) {
+    input.click()
+  }
+}
+
+const handleStepImageUpload = (e, index) => {
+  const file = e.target.files[0]
+  if (file && form.steps[index]) {
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      form.steps[index].image = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+  e.target.value = ''
+}
+
+const removeStepImage = (index) => {
+  if (form.steps[index]) {
+    form.steps[index].image = ''
+  }
+}
+
 const saveDraft = () => {
   ElMessage.success('草稿已保存')
+}
+
+const prepareStepsForSubmit = () => {
+  return form.steps.map(step => ({
+    content: step.content,
+    image: step.image || ''
+  }))
 }
 
 const handleSubmit = () => {
@@ -251,6 +316,9 @@ const handleSubmit = () => {
     ElMessage.error('请添加至少一种食材')
     return
   }
+
+  const stepsData = prepareStepsForSubmit()
+  console.log('提交的步骤数据:', stepsData)
   
   ElMessage.success(isEdit.value ? '菜谱已更新' : '菜谱发布成功')
   setTimeout(() => {
@@ -447,6 +515,61 @@ const handleSubmit = () => {
 
 .step-editor textarea {
   background: white;
+}
+
+.step-image-upload {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: var(--primary-color);
+  }
+}
+
+.step-upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+
+  .upload-icon {
+    font-size: 32px;
+  }
+}
+
+.step-image-preview {
+  position: relative;
+  display: inline-block;
+
+  img {
+    max-width: 240px;
+    max-height: 180px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+  }
+}
+
+.remove-step-image {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: white;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
 }
 
 .add-step-btn {
