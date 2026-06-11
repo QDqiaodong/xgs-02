@@ -20,6 +20,10 @@ public class CommentServiceImpl implements CommentService {
 
     private static final Long DEFAULT_USER_ID = 1L;
     private static final String DEFAULT_USERNAME = "美食爱好者";
+    private static final int MIN_PAGE = 1;
+    private static final int MAX_PAGE = 1000;
+    private static final int MIN_PAGE_SIZE = 1;
+    private static final int MAX_PAGE_SIZE = 100;
 
     @Override
     @Transactional
@@ -49,8 +53,8 @@ public class CommentServiceImpl implements CommentService {
             return new Page<>();
         }
 
-        int current = page != null && page > 0 ? page : 1;
-        int pageSize = size != null && size > 0 ? size : 10;
+        int current = (page != null && page >= MIN_PAGE) ? Math.min(page, MAX_PAGE) : MIN_PAGE;
+        int pageSize = (size != null && size >= MIN_PAGE_SIZE) ? Math.min(size, MAX_PAGE_SIZE) : 10;
 
         LambdaQueryWrapper<Comment> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Comment::getRecipeId, recipeId)

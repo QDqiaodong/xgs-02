@@ -40,6 +40,11 @@ public class RecipeServiceImpl implements RecipeService {
     private static final String DIMENSION_TOTAL = "total";
     private static final List<String> VALID_DIMENSIONS = List.of(DIMENSION_WEEKLY, DIMENSION_MONTHLY, DIMENSION_TOTAL);
 
+    private static final int MIN_PAGE = 1;
+    private static final int MAX_PAGE = 1000;
+    private static final int MIN_PAGE_SIZE = 1;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private static final String OLD_HOT_RECIPE_KEY_LEGACY = "recipe:hot:monthly";
 
     @Value("${recipe.cache.hot-recipe-expire:86400}")
@@ -195,8 +200,11 @@ public class RecipeServiceImpl implements RecipeService {
 
     @Override
     public Page<Recipe> getRecipePage(Integer page, Integer size, String keyword, String cuisine, String scene, Integer difficulty) {
+        int current = (page != null && page >= MIN_PAGE) ? Math.min(page, MAX_PAGE) : MIN_PAGE;
+        int pageSize = (size != null && size >= MIN_PAGE_SIZE) ? Math.min(size, MAX_PAGE_SIZE) : 10;
+
         if (keyword != null && !keyword.trim().isEmpty()) {
-            return searchRecipesWithWeight(page, size, keyword, cuisine, scene, difficulty);
+            return searchRecipesWithWeight(current, pageSize, keyword, cuisine, scene, difficulty);
         }
 
         LambdaQueryWrapper<Recipe> wrapper = new LambdaQueryWrapper<>();
@@ -218,19 +226,22 @@ public class RecipeServiceImpl implements RecipeService {
 
         wrapper.orderByDesc(Recipe::getFavoriteCount);
 
-        return recipeMapper.selectPage(new Page<>(page, size), wrapper);
+        return recipeMapper.selectPage(new Page<>(current, pageSize), wrapper);
     }
 
     private Page<Recipe> searchRecipesWithWeight(Integer page, Integer size, String keyword,
                                                   String cuisine, String scene, Integer difficulty) {
+        int current = (page != null && page >= MIN_PAGE) ? Math.min(page, MAX_PAGE) : MIN_PAGE;
+        int pageSize = (size != null && size >= MIN_PAGE_SIZE) ? Math.min(size, MAX_PAGE_SIZE) : 10;
+
         List<Recipe> allRecipes = recipeMapper.searchRecipesWithWeight(keyword, cuisine, scene, difficulty);
 
         int total = allRecipes.size();
-        int fromIndex = (page - 1) * size;
-        int toIndex = Math.min(fromIndex + size, total);
+        int fromIndex = (current - 1) * pageSize;
+        int toIndex = Math.min(fromIndex + pageSize, total);
 
-        Page<Recipe> result = new Page<>(page, size, total);
-        if (fromIndex >= total) {
+        Page<Recipe> result = new Page<>(current, pageSize, total);
+        if (fromIndex >= total || fromIndex < 0) {
             result.setRecords(List.of());
             return result;
         }
