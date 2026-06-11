@@ -49,6 +49,17 @@ CREATE TABLE IF NOT EXISTS comment (
     INDEX idx_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评论表';
 
+CREATE TABLE IF NOT EXISTS view_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    recipe_id BIGINT NOT NULL COMMENT '菜谱ID',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '浏览时间',
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除:0-未删,1-已删',
+    UNIQUE KEY uk_user_recipe (user_id, recipe_id, deleted),
+    INDEX idx_user_created (user_id, created_at DESC),
+    INDEX idx_recipe (recipe_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='浏览历史表';
+
 INSERT INTO recipe (title, description, cover_image, author, cook_time, difficulty, favorite_count, view_count, tags, ingredients, steps, tips, status, is_draft) VALUES
 ('红烧五花肉', '经典家常菜，肥而不腻，入口即化', 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=800&h=500&fit=crop', '美食达人', 60, 2, 1286, 5621, '川菜,家常菜,下饭神器', 
 '[{"name":"五花肉","amount":"500g","note":"选三层肉最佳"},{"name":"生抽","amount":"2勺","note":""},{"name":"老抽","amount":"1勺","note":"上色用"},{"name":"冰糖","amount":"30g","note":""},{"name":"料酒","amount":"2勺","note":""},{"name":"姜片","amount":"5片","note":""},{"name":"八角","amount":"2个","note":""},{"name":"桂皮","amount":"1小块","note":""},{"name":"盐","amount":"适量","note":""}]',

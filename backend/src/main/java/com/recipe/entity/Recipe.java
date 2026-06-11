@@ -47,4 +47,7 @@ public class Recipe {
 
     @TableLogic
     private Integer deleted;
+
+    @TableField(exist = false)
+    private LocalDateTime viewTime;
 }

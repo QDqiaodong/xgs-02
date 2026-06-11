@@ -8,6 +8,7 @@ import com.recipe.dto.RecipeDTO;
 import com.recipe.entity.Recipe;
 import com.recipe.mapper.RecipeMapper;
 import com.recipe.service.RecipeService;
+import com.recipe.service.ViewHistoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +30,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final RecipeMapper recipeMapper;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final ViewHistoryService viewHistoryService;
 
     private static final String HOT_RECIPE_KEY_PREFIX = "recipe:rank:v2:";
     private static final String HOT_RECIPE_KEY_WEEKLY = HOT_RECIPE_KEY_PREFIX + "weekly";
@@ -255,6 +257,11 @@ public class RecipeServiceImpl implements RecipeService {
         if (recipe != null) {
             recipe.setViewCount(recipe.getViewCount() == null ? 1 : recipe.getViewCount() + 1);
             recipeMapper.updateById(recipe);
+            try {
+                viewHistoryService.addViewHistory(id);
+            } catch (Exception e) {
+                log.warn("记录浏览历史失败，recipeId={}", id, e);
+            }
         }
         return recipe;
     }

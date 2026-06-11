@@ -81,4 +81,16 @@ export const commentApi = {
   deleteComment: (id) => api.delete(`/comments/${id}`)
 }
 
+export const viewHistoryApi = {
+  getViewHistory: (page = 1, size = 10) => {
+    const safePage = parseInt(page, 10)
+    const finalPage = (!isNaN(safePage) && safePage >= MIN_PAGE) ? Math.min(safePage, MAX_PAGE) : MIN_PAGE
+    const safeSize = parseInt(size, 10)
+    const finalSize = (!isNaN(safeSize) && safeSize >= MIN_PAGE_SIZE) ? Math.min(safeSize, MAX_PAGE_SIZE) : 10
+    return api.get('/view-history', { params: { page: finalPage, size: finalSize } })
+  },
+  removeViewHistory: (recipeId) => api.delete(`/view-history/${recipeId}`),
+  clearAllHistory: () => api.delete('/view-history/clear')
+}
+
 export default api
