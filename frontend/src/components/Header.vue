@@ -13,6 +13,7 @@
           <router-link to="/favorites" class="nav-link">我的收藏</router-link>
           <router-link to="/view-history" class="nav-link">浏览历史</router-link>
           <router-link to="/my-recipes" class="nav-link">我的菜谱</router-link>
+          <router-link to="/ingredient-nutrition" class="nav-link">食材营养</router-link>
         </nav>
 
         <router-link to="/profile" class="avatar-link" title="个人中心">

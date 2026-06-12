@@ -93,4 +93,17 @@ export const viewHistoryApi = {
   clearAllHistory: () => api.delete('/view-history/clear')
 }
 
+export const ingredientNutritionApi = {
+  getNutritions: (params) => api.get('/ingredient-nutrition', { params: normalizePaginationParams(params) }),
+  getAllNutritions: () => api.get('/ingredient-nutrition/all').then((result) => result?.data || []),
+  getNutritionCategories: () => api.get('/ingredient-nutrition/categories').then((result) => result?.data || []),
+  getNutritionById: (id) => api.get(`/ingredient-nutrition/${id}`),
+  getNutritionByName: (name) => api.get(`/ingredient-nutrition/name/${name}`),
+  createNutrition: (data) => api.post('/ingredient-nutrition', data),
+  updateNutrition: (id, data) => api.put(`/ingredient-nutrition/${id}`, data),
+  deleteNutrition: (id) => api.delete(`/ingredient-nutrition/${id}`),
+  calculateRecipeNutrition: (ingredients) => api.post('/ingredient-nutrition/calculate', { ingredients }),
+  calculateRecipeNutritionById: (recipeId) => api.get(`/ingredient-nutrition/recipe/${recipeId}`)
+}
+
 export default api

@@ -158,6 +158,59 @@
           </table>
         </div>
 
+        <div class="nutrition-section section-card">
+          <div class="nutrition-header">
+            <h2 class="section-title">📊 营养成分</h2>
+            <span class="print-only nutrition-print-info">
+              (每份)
+            </span>
+          </div>
+          
+          <div v-if="loadingNutrition" class="nutrition-loading">
+            <div class="spinner"></div>
+            <span>正在计算营养成分...</span>
+          </div>
+          
+          <div v-else-if="nutritionData" class="nutrition-content">
+            <div class="nutrition-summary">
+              <div class="nutrition-item calories">
+                <div class="nutrition-value">{{ nutritionData.totalCalories || 0 }}</div>
+                <div class="nutrition-label">热量 (千卡)</div>
+              </div>
+              <div class="nutrition-item protein">
+                <div class="nutrition-value">{{ nutritionData.totalProtein || 0 }}g</div>
+                <div class="nutrition-label">蛋白质</div>
+              </div>
+              <div class="nutrition-item fat">
+                <div class="nutrition-value">{{ nutritionData.totalFat || 0 }}g</div>
+                <div class="nutrition-label">脂肪</div>
+              </div>
+              <div class="nutrition-item carb">
+                <div class="nutrition-value">{{ nutritionData.totalCarbohydrate || 0 }}g</div>
+                <div class="nutrition-label">碳水化合物</div>
+              </div>
+              <div class="nutrition-item fiber">
+                <div class="nutrition-value">{{ nutritionData.totalFiber || 0 }}g</div>
+                <div class="nutrition-label">膳食纤维</div>
+              </div>
+              <div class="nutrition-item sodium">
+                <div class="nutrition-value">{{ nutritionData.totalSodium || 0 }}mg</div>
+                <div class="nutrition-label">钠</div>
+              </div>
+            </div>
+            
+            <div v-if="nutritionData.unmatchedIngredients && nutritionData.unmatchedIngredients.length > 0" class="nutrition-warning">
+              <span class="warning-icon">⚠️</span>
+              <span>以下食材暂无营养数据：{{ nutritionData.unmatchedIngredients.join('、') }}</span>
+            </div>
+          </div>
+          
+          <div v-else class="nutrition-empty">
+            <span class="empty-icon">📋</span>
+            <span>暂无营养数据</span>
+          </div>
+        </div>
+
         <div class="steps-section section-card">
           <h2 class="section-title">👨‍🍳 烹饪步骤</h2>
           <div class="steps-list">
@@ -242,7 +295,7 @@ import { ElMessage } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
 import StepTimer from '@/components/StepTimer.vue'
 import RecipeCard from '@/components/RecipeCard.vue'
-import { recipeApi } from '@/utils/api'
+import { recipeApi, ingredientNutritionApi } from '@/utils/api'
 
 const route = useRoute()
 const store = useRecipeStore()
@@ -251,6 +304,9 @@ const recipe = ref(null)
 const similarRecipes = ref([])
 const loadingSimilar = ref(false)
 const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&h=500&fit=crop'
+
+const nutritionData = ref(null)
+const loadingNutrition = ref(false)
 
 const minServings = 1
 const maxServings = 20
@@ -516,10 +572,25 @@ const loadRecipe = async () => {
     recipe.value = parseRecipeData(result?.data)
     if (recipe.value) {
       loadSimilarRecipes()
+      loadNutritionData()
     }
   } catch (err) {
     console.error('加载食谱详情失败', err)
     ElMessage.error('加载食谱失败')
+  }
+}
+
+const loadNutritionData = async () => {
+  if (!recipe.value?.id) return
+  loadingNutrition.value = true
+  try {
+    const result = await ingredientNutritionApi.calculateRecipeNutritionById(recipe.value.id)
+    nutritionData.value = result?.data || null
+  } catch (err) {
+    console.error('加载营养数据失败', err)
+    nutritionData.value = null
+  } finally {
+    loadingNutrition.value = false
   }
 }
 
@@ -896,6 +967,121 @@ const handleStepImageError = (e) => {
   
   tr:last-child td {
     border-bottom: none;
+  }
+}
+
+.nutrition-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+
+  .section-title {
+    margin-bottom: 0;
+  }
+
+  .print-only {
+    display: none;
+  }
+}
+
+.nutrition-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 30px;
+  color: var(--text-secondary);
+  font-size: 14px;
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border-width: 2px;
+  }
+}
+
+.nutrition-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 30px;
+  color: var(--text-light);
+  font-size: 14px;
+
+  .empty-icon {
+    font-size: 20px;
+  }
+}
+
+.nutrition-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.nutrition-item {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  text-align: center;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+
+  &.calories .nutrition-value {
+    color: #e74c3c;
+  }
+
+  &.protein .nutrition-value {
+    color: #3498db;
+  }
+
+  &.fat .nutrition-value {
+    color: #f39c12;
+  }
+
+  &.carb .nutrition-value {
+    color: #27ae60;
+  }
+
+  &.fiber .nutrition-value {
+    color: #9b59b6;
+  }
+
+  &.sodium .nutrition-value {
+    color: #1abc9c;
+  }
+}
+
+.nutrition-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.nutrition-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.nutrition-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #fff7ed;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: #c2410c;
+
+  .warning-icon {
+    flex-shrink: 0;
+    font-size: 16px;
   }
 }
 
