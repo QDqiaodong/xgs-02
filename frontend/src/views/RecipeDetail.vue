@@ -43,6 +43,17 @@
               </svg>
               {{ isFavorited ? '已收藏' : '收藏菜谱' }}
             </button>
+            <button 
+              class="btn btn-outline btn-shopping" 
+              @click="addToShoppingList"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="9" cy="21" r="1"/>
+                <circle cx="20" cy="21" r="1"/>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+              </svg>
+              加入购物清单
+            </button>
             <button class="btn btn-outline" @click="shareRecipe">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="18" cy="5" r="3"/>
@@ -82,6 +93,19 @@
               <span class="print-only servings-print-info">
                 ({{ currentServings }}人份)
               </span>
+            </div>
+            <div class="ingredients-actions no-print">
+              <button
+                class="btn btn-outline btn-add-shopping"
+                @click="addToShoppingList"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="21" r="1"/>
+                  <circle cx="20" cy="21" r="1"/>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                </svg>
+                全部加入购物清单
+              </button>
             </div>
             <div class="servings-control no-print">
               <div class="servings-label">
@@ -295,7 +319,7 @@ import { ElMessage } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
 import StepTimer from '@/components/StepTimer.vue'
 import RecipeCard from '@/components/RecipeCard.vue'
-import { recipeApi, ingredientNutritionApi } from '@/utils/api'
+import { recipeApi, ingredientNutritionApi, shoppingListApi } from '@/utils/api'
 
 const route = useRoute()
 const store = useRecipeStore()
@@ -643,6 +667,20 @@ const printRecipe = () => {
   window.print()
 }
 
+const addToShoppingList = async () => {
+  if (!recipe.value || !scaledIngredients.value || scaledIngredients.value.length === 0) {
+    ElMessage.warning('该菜谱暂无食材信息')
+    return
+  }
+  try {
+    await shoppingListApi.addFromRecipe(recipe.value.id, scaledIngredients.value)
+    ElMessage.success(`已将《${recipe.value.title}》的${scaledIngredients.value.length}种食材加入购物清单`)
+  } catch (e) {
+    console.error('加入购物清单失败', e)
+    ElMessage.error('加入购物清单失败')
+  }
+}
+
 const handleImageError = (e) => {
   if (e.target.src !== defaultImage) {
     e.target.src = defaultImage
@@ -724,6 +762,15 @@ const handleStepImageError = (e) => {
   background: linear-gradient(135deg, #ef4444, #f87171) !important;
 }
 
+.btn-shopping,
+.btn-add-shopping {
+  &:hover {
+    border-color: #8b5cf6 !important;
+    background: #8b5cf6 !important;
+    color: white !important;
+  }
+}
+
 .header-image img {
   width: 100%;
   height: 350px;
@@ -767,6 +814,17 @@ const handleStepImageError = (e) => {
   .print-only {
     display: none;
   }
+}
+
+.ingredients-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-add-shopping {
+  padding: 8px 16px;
+  font-size: 13px;
 }
 
 .servings-control {

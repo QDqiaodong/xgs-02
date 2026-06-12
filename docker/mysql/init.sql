@@ -123,6 +123,22 @@ CREATE TABLE IF NOT EXISTS ingredient_nutrition (
     INDEX idx_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='食材营养信息表';
 
+CREATE TABLE IF NOT EXISTS shopping_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    recipe_id BIGINT COMMENT '关联菜谱ID',
+    ingredient_name VARCHAR(200) NOT NULL COMMENT '食材名称',
+    amount VARCHAR(100) COMMENT '用量',
+    note VARCHAR(500) COMMENT '备注',
+    purchased TINYINT DEFAULT 0 COMMENT '是否已购买:0-未购,1-已购',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除:0-未删,1-已删',
+    INDEX idx_user_purchased (user_id, purchased, deleted),
+    INDEX idx_recipe (recipe_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='购物清单表';
+
 INSERT INTO ingredient_nutrition (name, alias, calories, protein, fat, carbohydrate, fiber, sodium, category, unit, remark) VALUES
 ('五花肉', '三层肉,猪五花肉', 395.00, 13.60, 37.00, 2.40, 0.00, 80.00, '肉类', 'g', '带皮五花肉'),
 ('鸡蛋', '鸡卵', 144.00, 13.30, 8.80, 2.80, 0.00, 132.00, '蛋奶豆制品', 'g', '可食用部分约50g/个'),

@@ -94,13 +94,27 @@
               <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" />
               全选
             </label>
-            <button
-              class="btn btn-danger"
-              :disabled="selectedIds.length === 0"
-              @click="batchRemove"
-            >
-              取消收藏 ({{ selectedIds.length }})
-            </button>
+            <div class="action-bar-btns">
+              <button
+                class="btn btn-outline"
+                :disabled="selectedIds.length === 0"
+                @click="batchAddToShopping"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="21" r="1"/>
+                  <circle cx="20" cy="21" r="1"/>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                </svg>
+                加入购物清单 ({{ selectedIds.length }})
+              </button>
+              <button
+                class="btn btn-danger"
+                :disabled="selectedIds.length === 0"
+                @click="batchRemove"
+              >
+                取消收藏 ({{ selectedIds.length }})
+              </button>
+            </div>
           </div>
 
           <div v-if="loading" class="loading">
@@ -170,6 +184,13 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
                     <line x1="7" y1="7" x2="7.01" y2="7"/>
+                  </svg>
+                </button>
+                <button class="action-btn shopping" @click="addToShopping(recipe)" title="加入购物清单">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="9" cy="21" r="1"/>
+                    <circle cx="20" cy="21" r="1"/>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                   </svg>
                 </button>
                 <button class="action-btn view" @click="goToDetail(recipe.id)" title="查看">
@@ -255,7 +276,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
-import { recipeApi } from '@/utils/api'
+import { recipeApi, shoppingListApi } from '@/utils/api'
 
 const router = useRouter()
 const store = useRecipeStore()
@@ -522,6 +543,55 @@ const quickAddTag = () => {
   quickNewTagName.value = ''
   ElMessage.success('标签创建并关联成功')
 }
+
+const parseIngredients = (recipe) => {
+  if (!recipe || !recipe.ingredients) return []
+  if (typeof recipe.ingredients === 'string') {
+    try {
+      return JSON.parse(recipe.ingredients)
+    } catch {
+      return []
+    }
+  }
+  return recipe.ingredients
+}
+
+const addToShopping = async (recipe) => {
+  const ingredients = parseIngredients(recipe)
+  if (!ingredients || ingredients.length === 0) {
+    ElMessage.warning('该菜谱暂无食材信息')
+    return
+  }
+  try {
+    await shoppingListApi.addFromRecipe(recipe.id, ingredients)
+    ElMessage.success(`已将《${recipe.title}》的${ingredients.length}种食材加入购物清单`)
+  } catch (e) {
+    console.error('加入购物清单失败', e)
+    ElMessage.error('加入购物清单失败')
+  }
+}
+
+const batchAddToShopping = async () => {
+  if (selectedIds.value.length === 0) {
+    ElMessage.warning('请先选择菜谱')
+    return
+  }
+  const recipesToAdd = filteredFavorites.value.filter(r => selectedIds.value.includes(r.id))
+  try {
+    let totalCount = 0
+    for (const recipe of recipesToAdd) {
+      const ingredients = parseIngredients(recipe)
+      if (ingredients && ingredients.length > 0) {
+        await shoppingListApi.addFromRecipe(recipe.id, ingredients)
+        totalCount += ingredients.length
+      }
+    }
+    ElMessage.success(`已将${recipesToAdd.length}道菜谱的共${totalCount}种食材加入购物清单`)
+  } catch (e) {
+    console.error('批量加入购物清单失败', e)
+    ElMessage.error('批量加入购物清单失败')
+  }
+}
 </script>
 
 <style lang="scss" scoped>
@@ -757,6 +827,11 @@ const quickAddTag = () => {
   box-shadow: var(--shadow-sm);
 }
 
+.action-bar-btns {
+  display: flex;
+  gap: 12px;
+}
+
 .select-all {
   display: flex;
   align-items: center;
@@ -906,6 +981,16 @@ const quickAddTag = () => {
   svg {
     width: 18px;
     height: 18px;
+  }
+
+  &.shopping {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+
+    &:hover {
+      background: #8b5cf6;
+      color: white;
+    }
   }
 
   &.view {

@@ -93,6 +93,17 @@ export const viewHistoryApi = {
   clearAllHistory: () => api.delete('/view-history/clear')
 }
 
+export const shoppingListApi = {
+  getShoppingList: () => api.get('/shopping-list'),
+  addShoppingItem: (data) => api.post('/shopping-list', data),
+  updateShoppingItem: (id, data) => api.put(`/shopping-list/${id}`, data),
+  deleteShoppingItem: (id) => api.delete(`/shopping-list/${id}`),
+  togglePurchased: (id, purchased) => api.patch(`/shopping-list/${id}/purchased`, { purchased }),
+  addFromRecipe: (recipeId, ingredients) => api.post('/shopping-list/from-recipe', { recipeId, ingredients }),
+  deleteBatch: (ids) => api.delete('/shopping-list/batch', { data: { ids } }),
+  clearPurchased: () => api.delete('/shopping-list/clear-purchased')
+}
+
 export const ingredientNutritionApi = {
   getNutritions: (params) => api.get('/ingredient-nutrition', { params: normalizePaginationParams(params) }),
   getAllNutritions: () => api.get('/ingredient-nutrition/all').then((result) => result?.data || []),

@@ -50,6 +50,11 @@ const routes = [
     path: '/ingredient-nutrition',
     name: 'IngredientNutrition',
     component: () => import('@/views/IngredientNutrition.vue')
+  },
+  {
+    path: '/shopping-list',
+    name: 'ShoppingList',
+    component: () => import('@/views/ShoppingList.vue')
   }
 ]
 

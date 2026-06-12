@@ -11,6 +11,7 @@
           <router-link to="/" class="nav-link">首页</router-link>
           <router-link to="/recipes" class="nav-link">菜谱大全</router-link>
           <router-link to="/favorites" class="nav-link">我的收藏</router-link>
+          <router-link to="/shopping-list" class="nav-link">购物清单</router-link>
           <router-link to="/view-history" class="nav-link">浏览历史</router-link>
           <router-link to="/my-recipes" class="nav-link">我的菜谱</router-link>
           <router-link to="/ingredient-nutrition" class="nav-link">食材营养</router-link>
