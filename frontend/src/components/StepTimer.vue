@@ -103,15 +103,17 @@ let audioCtx = null
 
 const durationOptions = [1, 3, 5, 10, 15, 30]
 
-const defaultDuration = props.defaultMinutes * 60
+const defaultDuration = computed(() => props.defaultMinutes * 60)
 
 const state = ref({
-  duration: defaultDuration,
-  remaining: defaultDuration,
+  duration: defaultDuration.value,
+  remaining: defaultDuration.value,
   isRunning: false,
   startTime: null,
   elapsedBeforePause: 0
 })
+
+const hasUserModified = ref(false)
 
 const circumference = 2 * Math.PI * 45
 
@@ -123,22 +125,40 @@ const progressOffset = computed(() => {
 
 const loadState = () => {
   const saved = store.getTimerState(props.recipeId, props.stepIndex)
-  if (saved.duration !== 60 || saved.remaining !== 60 || saved.isRunning || saved.elapsedBeforePause > 0) {
+  const hasSavedState = saved.duration !== 60 || saved.remaining !== 60 || saved.isRunning || saved.elapsedBeforePause > 0
+  
+  if (hasSavedState) {
     state.value = { ...saved }
+    hasUserModified.value = saved.duration !== defaultDuration.value
   } else {
     state.value = {
-      duration: defaultDuration,
-      remaining: defaultDuration,
+      duration: defaultDuration.value,
+      remaining: defaultDuration.value,
       isRunning: false,
       startTime: null,
       elapsedBeforePause: 0
     }
+    hasUserModified.value = false
   }
   displayRemaining.value = state.value.remaining
 }
 
 const saveState = () => {
   store.setTimerState(props.recipeId, props.stepIndex, state.value)
+}
+
+const resetToDefault = () => {
+  stopTick()
+  state.value = {
+    duration: defaultDuration.value,
+    remaining: defaultDuration.value,
+    isRunning: false,
+    startTime: null,
+    elapsedBeforePause: 0
+  }
+  hasUserModified.value = false
+  displayRemaining.value = state.value.remaining
+  store.resetTimerState(props.recipeId, props.stepIndex)
 }
 
 const formatTime = (seconds) => {
@@ -156,6 +176,7 @@ const setDuration = (minutes) => {
   state.value.duration = minutes * 60
   state.value.remaining = minutes * 60
   displayRemaining.value = state.value.remaining
+  hasUserModified.value = true
   saveState()
 }
 
@@ -166,6 +187,7 @@ const adjustDuration = (seconds) => {
   state.value.duration = newDuration
   state.value.remaining = newDuration
   displayRemaining.value = state.value.remaining
+  hasUserModified.value = true
   saveState()
 }
 
@@ -285,6 +307,15 @@ watch(
     if (state.value.isRunning) {
       updateRemaining()
       if (state.value.isRunning) startTick()
+    }
+  }
+)
+
+watch(
+  () => props.defaultMinutes,
+  () => {
+    if (!hasUserModified.value && !state.value.isRunning) {
+      resetToDefault()
     }
   }
 )

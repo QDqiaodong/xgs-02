@@ -72,7 +72,12 @@
       <div class="detail-content">
         <div class="ingredients-section section-card">
           <div class="ingredients-header">
-            <h2 class="section-title">🥬 食材清单</h2>
+            <div class="section-title-wrapper">
+              <h2 class="section-title">🥬 食材清单</h2>
+              <span class="print-only servings-print-info">
+                ({{ currentServings }}人份)
+              </span>
+            </div>
             <div class="servings-control no-print">
               <div class="servings-label">
                 <span class="servings-icon">👥</span>
@@ -161,6 +166,9 @@
                     :default-minutes="getDefaultStepTime(index, step)"
                   />
                 </div>
+                <span class="print-only step-time-print">
+                  ⏱️ 建议时间: {{ getDefaultStepTime(index, step) }}分钟
+                </span>
               </div>
               <div class="step-content">
                 <div v-if="step.image" class="step-image">
@@ -234,10 +242,14 @@ const similarRecipes = ref([])
 const loadingSimilar = ref(false)
 const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&h=500&fit=crop'
 
-const originalServings = ref(1)
-const currentServings = ref(1)
 const minServings = 1
 const maxServings = 20
+
+const originalServings = computed(() => store.getOriginalServings(route.params.id) || 1)
+const currentServings = computed({
+  get: () => store.getServings(route.params.id) || originalServings.value,
+  set: (val) => store.setServings(route.params.id, val)
+})
 
 const isFavorited = computed(() => store.isFavorite(route.params.id))
 
@@ -270,8 +282,21 @@ const parseRecipeData = (data) => {
   if (result.ingredients && result.ingredients.length > 0) {
     const firstItem = result.ingredients[0]
     if (firstItem.servings) {
-      originalServings.value = parseInt(firstItem.servings) || 1
-      currentServings.value = originalServings.value
+      const origServings = parseInt(firstItem.servings) || 1
+      store.setOriginalServings(data.id, origServings)
+      if (!store.getServings(data.id)) {
+        store.setServings(data.id, origServings)
+      }
+    } else {
+      store.setOriginalServings(data.id, 1)
+      if (!store.getServings(data.id)) {
+        store.setServings(data.id, 1)
+      }
+    }
+  } else {
+    store.setOriginalServings(data.id, 1)
+    if (!store.getServings(data.id)) {
+      store.setServings(data.id, 1)
     }
   }
   return result
@@ -408,27 +433,41 @@ const scaledIngredients = computed(() => {
 const increaseServings = () => {
   if (currentServings.value < maxServings) {
     currentServings.value++
+    onServingsChanged()
   }
 }
 
 const decreaseServings = () => {
   if (currentServings.value > minServings) {
     currentServings.value--
+    onServingsChanged()
   }
 }
 
 const clampServings = () => {
-  if (currentServings.value < minServings) {
-    currentServings.value = minServings
-  } else if (currentServings.value > maxServings) {
-    currentServings.value = maxServings
+  let val = currentServings.value
+  if (val < minServings) {
+    val = minServings
+  } else if (val > maxServings) {
+    val = maxServings
   }
-  currentServings.value = Math.round(currentServings.value)
+  val = Math.round(val)
+  if (val !== currentServings.value) {
+    currentServings.value = val
+    onServingsChanged()
+  }
 }
 
 const resetServings = () => {
-  currentServings.value = originalServings.value
+  store.resetServings(route.params.id)
+  onServingsChanged()
   ElMessage.success('已恢复原始份数')
+}
+
+const onServingsChanged = () => {
+  if (recipe.value?.id) {
+    store.resetAllTimersForRecipe(recipe.value.id)
+  }
 }
 
 watch(currentServings, clampServings)
@@ -440,13 +479,21 @@ const getDifficultyLabel = (level) => {
 
 const getDefaultStepTime = (index, step) => {
   const content = (step.content || '').toLowerCase()
-  if (/炖煮|慢炖|小火炖|煮.*分钟|卤|焖/.test(content)) return 45
-  if (/焯水|汆/.test(content)) return 5
-  if (/炒.*糖色|炒糖/.test(content)) return 3
-  if (/翻炒|炒/.test(content)) return 5
-  if (/收汁/.test(content)) return 10
-  if (/腌|浸泡/.test(content)) return 15
-  return 5
+  let baseTime = 5
+  if (/炖煮|慢炖|小火炖|煮.*分钟|卤|焖/.test(content)) baseTime = 45
+  else if (/焯水|汆/.test(content)) baseTime = 5
+  else if (/炒.*糖色|炒糖/.test(content)) baseTime = 3
+  else if (/翻炒|炒/.test(content)) baseTime = 5
+  else if (/收汁/.test(content)) baseTime = 10
+  else if (/腌|浸泡/.test(content)) baseTime = 15
+  
+  const ratio = currentServings.value / originalServings.value
+  if (ratio > 1 && /炖煮|慢炖|小火炖|煮.*分钟|卤|焖|腌|浸泡/.test(content)) {
+    const adjustedTime = Math.round(baseTime * Math.min(ratio, 2))
+    return Math.max(adjustedTime, baseTime)
+  }
+  
+  return baseTime
 }
 
 onMounted(() => {
@@ -616,8 +663,18 @@ const printRecipe = () => {
   gap: 20px;
   margin-bottom: 24px;
 
+  .section-title-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
   .section-title {
     margin-bottom: 0;
+  }
+
+  .print-only {
+    display: none;
   }
 }
 
@@ -838,6 +895,10 @@ const printRecipe = () => {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.step-time-print {
+  display: none;
 }
 
 .step-number {
@@ -1216,6 +1277,23 @@ const printRecipe = () => {
 
   .no-print {
     display: none !important;
+  }
+
+  .print-only {
+    display: inline !important;
+  }
+
+  .servings-print-info {
+    font-size: 16px !important;
+    color: #e67e22 !important;
+    font-weight: 600 !important;
+  }
+
+  .step-time-print {
+    display: inline-block !important;
+    font-size: 13px !important;
+    color: #666 !important;
+    margin-left: 8px !important;
   }
 
   .detail-header {

@@ -5,6 +5,7 @@ import { recipeApi } from '@/utils/api'
 const STORAGE_KEY = 'recipe-timer-store'
 const TAGS_STORAGE_KEY = 'recipe-favorite-tags-store'
 const RECIPE_TAGS_STORAGE_KEY = 'recipe-favorite-recipe-tags-store'
+const SERVINGS_STORAGE_KEY = 'recipe-servings-store'
 
 const loadTimersFromStorage = () => {
   try {
@@ -42,6 +43,18 @@ const loadRecipeTagsFromStorage = () => {
   return {}
 }
 
+const loadServingsFromStorage = () => {
+  try {
+    const saved = localStorage.getItem(SERVINGS_STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load servings from storage', e)
+  }
+  return {}
+}
+
 export const useRecipeStore = defineStore('recipe', () => {
   const recipes = ref([])
   const currentRecipe = ref(null)
@@ -55,6 +68,8 @@ export const useRecipeStore = defineStore('recipe', () => {
   const timers = ref(loadTimersFromStorage())
   const tags = ref(loadTagsFromStorage())
   const recipeTags = ref(loadRecipeTagsFromStorage())
+  const servings = ref(loadServingsFromStorage())
+  const originalServings = ref({})
 
   const saveTimersToStorage = () => {
     try {
@@ -80,9 +95,18 @@ export const useRecipeStore = defineStore('recipe', () => {
     }
   }
 
+  const saveServingsToStorage = () => {
+    try {
+      localStorage.setItem(SERVINGS_STORAGE_KEY, JSON.stringify(servings.value))
+    } catch (e) {
+      console.error('Failed to save servings to storage', e)
+    }
+  }
+
   watch(timers, saveTimersToStorage, { deep: true })
   watch(tags, saveTagsToStorage, { deep: true })
   watch(recipeTags, saveRecipeTagsToStorage, { deep: true })
+  watch(servings, saveServingsToStorage, { deep: true })
 
   const getTimerState = (recipeId, stepIndex) => {
     const key = `${recipeId}-${stepIndex}`
@@ -105,6 +129,38 @@ export const useRecipeStore = defineStore('recipe', () => {
     const key = `${recipeId}-${stepIndex}`
     delete timers.value[key]
     saveTimersToStorage()
+  }
+
+  const resetAllTimersForRecipe = (recipeId) => {
+    const keys = Object.keys(timers.value).filter(k => k.startsWith(`${recipeId}-`))
+    keys.forEach(key => {
+      delete timers.value[key]
+    })
+    saveTimersToStorage()
+  }
+
+  const getServings = (recipeId) => {
+    return servings.value[recipeId] || null
+  }
+
+  const setServings = (recipeId, value) => {
+    servings.value[recipeId] = value
+    saveServingsToStorage()
+  }
+
+  const getOriginalServings = (recipeId) => {
+    return originalServings.value[recipeId] || 1
+  }
+
+  const setOriginalServings = (recipeId, value) => {
+    originalServings.value[recipeId] = value
+  }
+
+  const resetServings = (recipeId) => {
+    if (originalServings.value[recipeId]) {
+      servings.value[recipeId] = originalServings.value[recipeId]
+      saveServingsToStorage()
+    }
   }
 
   const getRecipeById = computed(() => (id) => {
@@ -303,6 +359,8 @@ export const useRecipeStore = defineStore('recipe', () => {
     timers,
     tags,
     recipeTags,
+    servings,
+    originalServings,
     getRecipeById,
     isFavorite,
     setRecipes,
@@ -318,6 +376,7 @@ export const useRecipeStore = defineStore('recipe', () => {
     getTimerState,
     setTimerState,
     resetTimerState,
+    resetAllTimersForRecipe,
     addTag,
     renameTag,
     deleteTag,
@@ -325,6 +384,11 @@ export const useRecipeStore = defineStore('recipe', () => {
     removeTagFromRecipe,
     getRecipeTagIds,
     getRecipeTags,
-    getTagRecipeCount
+    getTagRecipeCount,
+    getServings,
+    setServings,
+    getOriginalServings,
+    setOriginalServings,
+    resetServings
   }
 })
