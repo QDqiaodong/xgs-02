@@ -1,7 +1,13 @@
 <template>
   <div class="recipe-card" :class="{ 'waterfall-mode': mode === 'waterfall' }" @click="goToDetail">
     <div class="card-image" :class="{ 'auto-height': mode === 'waterfall' }">
-      <img :src="recipe.coverImage || defaultImage" :alt="recipe.title" loading="lazy" />
+      <img 
+        :src="recipe.coverImage || defaultImage" 
+        :key="'card-' + recipe.id + '-' + (recipe.coverImage || defaultImage)"
+        :alt="recipe.title" 
+        loading="lazy"
+        @error="handleImageError"
+      />
       <div class="card-overlay">
         <span class="difficulty">{{ getDifficultyLabel(recipe.difficulty) }}</span>
         <span class="time">{{ recipe.cookTime }}分钟</span>
@@ -35,7 +41,7 @@
 </template>
 
 <script setup>
-import { defineProps } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -56,6 +62,12 @@ const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?
 const getDifficultyLabel = (level) => {
   const labels = { 1: '简单', 2: '中等', 3: '困难' }
   return labels[level] || '中等'
+}
+
+const handleImageError = (e) => {
+  if (e.target.src !== defaultImage) {
+    e.target.src = defaultImage
+  }
 }
 
 const goToDetail = () => {
@@ -88,6 +100,7 @@ const goToDetail = () => {
     height: 100%;
     object-fit: cover;
     transition: transform 0.5s ease;
+    display: block;
   }
   
   &:hover img {

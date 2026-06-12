@@ -65,7 +65,12 @@
         </div>
         
         <div class="header-image">
-          <img :src="recipe.coverImage || defaultImage" :alt="recipe.title" />
+          <img 
+            :src="recipe.coverImage || defaultImage" 
+            :key="'detail-cover-' + recipe.id + '-' + (recipe.coverImage || defaultImage)"
+            :alt="recipe.title" 
+            @error="handleImageError"
+          />
         </div>
       </div>
 
@@ -172,7 +177,12 @@
               </div>
               <div class="step-content">
                 <div v-if="step.image" class="step-image">
-                  <img :src="step.image" :alt="'步骤' + (index + 1)" />
+                  <img 
+                    :src="step.image" 
+                    :key="'detail-step-' + recipe.id + '-' + index + '-' + step.image"
+                    :alt="'步骤' + (index + 1)" 
+                    @error="handleStepImageError"
+                  />
                 </div>
                 <p class="step-text">{{ step.content }}</p>
               </div>
@@ -560,6 +570,16 @@ const shareRecipe = () => {
 
 const printRecipe = () => {
   window.print()
+}
+
+const handleImageError = (e) => {
+  if (e.target.src !== defaultImage) {
+    e.target.src = defaultImage
+  }
+}
+
+const handleStepImageError = (e) => {
+  e.target.style.display = 'none'
 }
 </script>
 

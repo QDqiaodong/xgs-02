@@ -71,7 +71,7 @@
           
           <div class="form-group">
             <label>封面图片</label>
-            <div class="image-upload" @click="triggerUpload">
+            <div class="image-upload" @click="triggerUpload" :class="{ 'uploading': coverUploading }">
               <input 
                 type="file" 
                 ref="fileInput" 
@@ -80,12 +80,19 @@
                 @change="handleImageUpload"
               />
               <div v-if="form.coverImage" class="image-preview">
-                <img :src="form.coverImage" alt="封面" />
-                <button type="button" class="remove-image" @click.stop="removeImage">×</button>
+                <img :src="form.coverImage" :key="'cover-' + form.coverImage" alt="封面" />
+                <button type="button" class="remove-image" @click.stop="removeImage" :disabled="coverUploading">×</button>
+                <div v-if="coverUploading" class="uploading-overlay">
+                  <div class="spinner"></div>
+                  <span>上传中...</span>
+                </div>
               </div>
               <div v-else class="upload-placeholder">
-                <span class="upload-icon">📷</span>
-                <span>点击上传封面图片</span>
+                <span v-if="!coverUploading" class="upload-icon">📷</span>
+                <div v-else class="uploading-spinner">
+                  <div class="spinner"></div>
+                </div>
+                <span>{{ coverUploading ? '上传中...' : '点击上传封面图片' }}</span>
               </div>
             </div>
           </div>
@@ -108,7 +115,7 @@
                   </svg>
                 </button>
               </div>
-              <div class="step-image-upload" @click="triggerStepImageUpload(step._id)">
+              <div class="step-image-upload" @click="triggerStepImageUpload(step._id)" :class="{ 'uploading': stepUploading[step._id] }">
                 <input
                   type="file"
                   :ref="el => setStepFileInput(el, step._id)"
@@ -117,12 +124,19 @@
                   @change="(e) => handleStepImageUpload(e, step._id)"
                 />
                 <div v-if="step.image" class="step-image-preview">
-                  <img :src="step.image" :alt="'步骤' + (index + 1)" />
-                  <button type="button" class="remove-step-image" @click.stop="removeStepImage(step._id)">×</button>
+                  <img :src="step.image" :key="'step-' + step._id + '-' + step.image" :alt="'步骤' + (index + 1)" />
+                  <button type="button" class="remove-step-image" @click.stop="removeStepImage(step._id)" :disabled="stepUploading[step._id]">×</button>
+                  <div v-if="stepUploading[step._id]" class="uploading-overlay">
+                    <div class="spinner"></div>
+                    <span>上传中...</span>
+                  </div>
                 </div>
                 <div v-else class="step-upload-placeholder">
-                  <span class="upload-icon">📷</span>
-                  <span>点击上传步骤图片</span>
+                  <span v-if="!stepUploading[step._id]" class="upload-icon">📷</span>
+                  <div v-else class="uploading-spinner">
+                    <div class="spinner"></div>
+                  </div>
+                  <span>{{ stepUploading[step._id] ? '上传中...' : '点击上传步骤图片' }}</span>
                 </div>
               </div>
               <textarea
@@ -151,8 +165,11 @@
         </div>
 
         <div class="form-actions">
-          <button type="button" class="btn btn-outline" @click="saveDraft">保存草稿</button>
-          <button type="submit" class="btn btn-primary">发布菜谱</button>
+          <button type="button" class="btn btn-outline" @click="saveDraft" :disabled="submitting">保存草稿</button>
+          <button type="submit" class="btn btn-primary" :disabled="submitting">
+            <span v-if="submitting" class="btn-spinner"></span>
+            {{ submitting ? '提交中...' : (isEdit ? '更新菜谱' : '发布菜谱') }}
+          </button>
         </div>
       </form>
     </div>
@@ -172,6 +189,9 @@ const router = useRouter()
 const isEdit = ref(!!route.params.id)
 const fileInput = ref(null)
 const stepFileInputs = ref({})
+const coverUploading = ref(false)
+const stepUploading = reactive({})
+const submitting = ref(false)
 
 let stepIdCounter = Date.now()
 const genStepId = () => `step_${++stepIdCounter}`
@@ -278,7 +298,8 @@ const toggleTag = (tag) => {
 }
 
 const addStep = () => {
-  form.steps.push(createStep())
+  const newStep = createStep()
+  form.steps.push(newStep)
 }
 
 const removeStep = (stepId) => {
@@ -287,6 +308,7 @@ const removeStep = (stepId) => {
     if (index > -1) {
       form.steps.splice(index, 1)
       delete stepFileInputs.value[stepId]
+      delete stepUploading[stepId]
     }
   } else {
     ElMessage.warning('至少保留一个步骤')
@@ -294,21 +316,35 @@ const removeStep = (stepId) => {
 }
 
 const triggerUpload = () => {
+  if (coverUploading.value) return
   fileInput.value.click()
 }
 
-const handleImageUpload = (e) => {
+const handleImageUpload = async (e) => {
   const file = e.target.files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      form.coverImage = e.target.result
+  e.target.value = ''
+  
+  if (!file) return
+  
+  coverUploading.value = true
+  
+  try {
+    const result = await recipeApi.uploadImage(file)
+    if (result?.data?.url) {
+      form.coverImage = result.data.url
+    } else {
+      throw new Error('上传失败')
     }
-    reader.readAsDataURL(file)
+  } catch (err) {
+    console.error('封面图片上传失败', err)
+    ElMessage.error('封面图片上传失败，请重试')
+  } finally {
+    coverUploading.value = false
   }
 }
 
 const removeImage = () => {
+  if (coverUploading.value) return
   form.coverImage = ''
 }
 
@@ -319,26 +355,39 @@ const setStepFileInput = (el, stepId) => {
 }
 
 const triggerStepImageUpload = (stepId) => {
+  if (stepUploading[stepId]) return
   const input = stepFileInputs.value[stepId]
   if (input) {
     input.click()
   }
 }
 
-const handleStepImageUpload = (e, stepId) => {
+const handleStepImageUpload = async (e, stepId) => {
   const file = e.target.files[0]
-  const step = getStepById(stepId)
-  if (file && step) {
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      step.image = ev.target.result
-    }
-    reader.readAsDataURL(file)
-  }
   e.target.value = ''
+  
+  const step = getStepById(stepId)
+  if (!file || !step) return
+  
+  stepUploading[stepId] = true
+  
+  try {
+    const result = await recipeApi.uploadImage(file)
+    if (result?.data?.url) {
+      step.image = result.data.url
+    } else {
+      throw new Error('上传失败')
+    }
+  } catch (err) {
+    console.error('步骤图片上传失败', err)
+    ElMessage.error('步骤图片上传失败，请重试')
+  } finally {
+    stepUploading[stepId] = false
+  }
 }
 
 const removeStepImage = (stepId) => {
+  if (stepUploading[stepId]) return
   const step = getStepById(stepId)
   if (step) {
     step.image = ''
@@ -356,7 +405,7 @@ const prepareStepsForSubmit = () => {
   }))
 }
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (!form.title || !form.description || !form.cookTime) {
     ElMessage.error('请填写必填项')
     return
@@ -366,14 +415,23 @@ const handleSubmit = () => {
     ElMessage.error('请添加至少一种食材')
     return
   }
-
-  const stepsData = prepareStepsForSubmit()
-  console.log('提交的步骤数据:', stepsData)
   
-  ElMessage.success(isEdit.value ? '菜谱已更新' : '菜谱发布成功')
-  setTimeout(() => {
-    router.push('/my-recipes')
-  }, 1000)
+  submitting.value = true
+  
+  try {
+    const stepsData = prepareStepsForSubmit()
+    console.log('提交的步骤数据:', stepsData)
+    
+    ElMessage.success(isEdit.value ? '菜谱已更新' : '菜谱发布成功')
+    setTimeout(() => {
+      router.push('/my-recipes')
+    }, 1000)
+  } catch (err) {
+    console.error('提交失败', err)
+    ElMessage.error('提交失败，请重试')
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -445,6 +503,11 @@ const handleSubmit = () => {
       outline: none;
       border-color: var(--primary-color);
     }
+    
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
   }
   
   textarea {
@@ -480,9 +543,14 @@ const handleSubmit = () => {
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
   
-  &:hover {
+  &:hover:not(.uploading) {
     border-color: var(--primary-color);
+  }
+  
+  &.uploading {
+    cursor: wait;
   }
 }
 
@@ -495,6 +563,17 @@ const handleSubmit = () => {
   
   .upload-icon {
     font-size: 48px;
+  }
+}
+
+.uploading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  .spinner {
+    width: 32px;
+    height: 32px;
   }
 }
 
@@ -521,6 +600,37 @@ const handleSubmit = () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
+  cursor: pointer;
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.uploading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border-color: rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+  }
 }
 
 .steps-editor {
@@ -556,6 +666,8 @@ const handleSubmit = () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
+  cursor: pointer;
   
   svg {
     width: 18px;
@@ -575,9 +687,14 @@ const handleSubmit = () => {
   cursor: pointer;
   margin-bottom: 12px;
   transition: all 0.2s ease;
+  position: relative;
 
-  &:hover {
+  &:hover:not(.uploading) {
     border-color: var(--primary-color);
+  }
+  
+  &.uploading {
+    cursor: wait;
   }
 }
 
@@ -620,6 +737,11 @@ const handleSubmit = () => {
   justify-content: center;
   border: none;
   cursor: pointer;
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .add-step-btn {
@@ -650,5 +772,30 @@ const handleSubmit = () => {
   justify-content: flex-end;
   gap: 16px;
   padding: 16px 0;
+}
+
+.btn {
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
