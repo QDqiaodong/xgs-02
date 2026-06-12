@@ -101,24 +101,24 @@
             <div v-for="(step, index) in form.steps" :key="step._id" class="step-editor">
               <div class="step-header">
                 <span class="step-number">步骤 {{ index + 1 }}</span>
-                <button type="button" class="delete-step" @click="removeStep(index)">
+                <button type="button" class="delete-step" @click="removeStep(step._id)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                   </svg>
                 </button>
               </div>
-              <div class="step-image-upload" @click="triggerStepImageUpload(index)">
+              <div class="step-image-upload" @click="triggerStepImageUpload(step._id)">
                 <input
                   type="file"
-                  :ref="el => setStepFileInput(el, index)"
+                  :ref="el => setStepFileInput(el, step._id)"
                   accept="image/*"
                   style="display: none"
-                  @change="(e) => handleStepImageUpload(e, index)"
+                  @change="(e) => handleStepImageUpload(e, step._id)"
                 />
                 <div v-if="step.image" class="step-image-preview">
                   <img :src="step.image" :alt="'步骤' + (index + 1)" />
-                  <button type="button" class="remove-step-image" @click.stop="removeStepImage(index)">×</button>
+                  <button type="button" class="remove-step-image" @click.stop="removeStepImage(step._id)">×</button>
                 </div>
                 <div v-else class="step-upload-placeholder">
                   <span class="upload-icon">📷</span>
@@ -164,6 +164,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import IngredientsTable from '@/components/IngredientsTable.vue'
+import { recipeApi } from '@/utils/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -174,6 +175,14 @@ const stepFileInputs = ref({})
 
 let stepIdCounter = Date.now()
 const genStepId = () => `step_${++stepIdCounter}`
+
+const getStepIndexById = (stepId) => {
+  return form.steps.findIndex(s => s._id === stepId)
+}
+
+const getStepById = (stepId) => {
+  return form.steps.find(s => s._id === stepId)
+}
 
 const createStep = (content = '', image = '') => ({
   _id: genStepId(),
@@ -196,32 +205,67 @@ const form = reactive({
 
 const cuisineTags = ['川菜', '粤菜', '湘菜', '鲁菜', '苏菜', '浙菜', '闽菜', '徽菜', '家常菜', '快手菜', '甜点', '汤羹', '凉菜']
 
+const parseRecipeData = (data) => {
+  if (!data) return null
+  const result = { ...data }
+  
+  if (typeof result.tags === 'string') {
+    result.tags = result.tags.split(',').map(t => t.trim()).filter(t => t)
+  } else if (!result.tags) {
+    result.tags = []
+  }
+  
+  if (typeof result.ingredients === 'string') {
+    try {
+      result.ingredients = JSON.parse(result.ingredients)
+    } catch {
+      result.ingredients = []
+    }
+  } else if (!result.ingredients) {
+    result.ingredients = []
+  }
+  
+  if (typeof result.steps === 'string') {
+    try {
+      const parsedSteps = JSON.parse(result.steps)
+      result.steps = parsedSteps.map(step => createStep(step.content || '', step.image || ''))
+    } catch {
+      result.steps = [createStep()]
+    }
+  } else if (Array.isArray(result.steps)) {
+    result.steps = result.steps.map(step => createStep(step.content || '', step.image || ''))
+  } else {
+    result.steps = [createStep()]
+  }
+  
+  if (!result.tips) {
+    result.tips = ''
+  }
+  
+  return result
+}
+
 onMounted(() => {
   if (isEdit.value) {
     loadRecipe()
   }
 })
 
-const loadRecipe = () => {
-  const mockData = {
-    title: '红烧五花肉',
-    description: '经典家常菜，肥而不腻，入口即化',
-    cookTime: 60,
-    difficulty: '2',
-    author: '美食达人',
-    tags: ['川菜', '家常菜'],
-    coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=800&h=500&fit=crop',
-    ingredients: [
-      { name: '五花肉', amount: '500g', note: '选三层肉最佳' },
-      { name: '生抽', amount: '2勺', note: '' }
-    ],
-    steps: [
-      createStep('五花肉切块，冷水下锅焯水', ''),
-      createStep('锅中放少许油，加入冰糖小火炒出糖色', '')
-    ],
-    tips: '炒糖色要用小火'
+const loadRecipe = async () => {
+  try {
+    const result = await recipeApi.getRecipeDetail(route.params.id)
+    const parsedData = parseRecipeData(result?.data)
+    if (parsedData) {
+      Object.keys(parsedData).forEach(key => {
+        if (key in form) {
+          form[key] = parsedData[key]
+        }
+      })
+    }
+  } catch (err) {
+    console.error('加载菜谱数据失败', err)
+    ElMessage.error('加载菜谱失败')
   }
-  Object.assign(form, mockData)
 }
 
 const toggleTag = (tag) => {
@@ -237,9 +281,13 @@ const addStep = () => {
   form.steps.push(createStep())
 }
 
-const removeStep = (index) => {
+const removeStep = (stepId) => {
   if (form.steps.length > 1) {
-    form.steps.splice(index, 1)
+    const index = getStepIndexById(stepId)
+    if (index > -1) {
+      form.steps.splice(index, 1)
+      delete stepFileInputs.value[stepId]
+    }
   } else {
     ElMessage.warning('至少保留一个步骤')
   }
@@ -264,34 +312,36 @@ const removeImage = () => {
   form.coverImage = ''
 }
 
-const setStepFileInput = (el, index) => {
+const setStepFileInput = (el, stepId) => {
   if (el) {
-    stepFileInputs.value[index] = el
+    stepFileInputs.value[stepId] = el
   }
 }
 
-const triggerStepImageUpload = (index) => {
-  const input = stepFileInputs.value[index]
+const triggerStepImageUpload = (stepId) => {
+  const input = stepFileInputs.value[stepId]
   if (input) {
     input.click()
   }
 }
 
-const handleStepImageUpload = (e, index) => {
+const handleStepImageUpload = (e, stepId) => {
   const file = e.target.files[0]
-  if (file && form.steps[index]) {
+  const step = getStepById(stepId)
+  if (file && step) {
     const reader = new FileReader()
     reader.onload = (ev) => {
-      form.steps[index].image = ev.target.result
+      step.image = ev.target.result
     }
     reader.readAsDataURL(file)
   }
   e.target.value = ''
 }
 
-const removeStepImage = (index) => {
-  if (form.steps[index]) {
-    form.steps[index].image = ''
+const removeStepImage = (stepId) => {
+  const step = getStepById(stepId)
+  if (step) {
+    step.image = ''
   }
 }
 

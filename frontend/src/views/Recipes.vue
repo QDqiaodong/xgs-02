@@ -224,6 +224,8 @@ const showSuggestions = ref(false)
 const activeSuggestionIndex = ref(-1)
 const searchInputRef = ref(null)
 const suggestionListRef = ref(null)
+let lastKeyword = ''
+let keywordChangeTimer = null
 
 const filters = ref({
   cuisine: '',
@@ -308,12 +310,29 @@ const displayRecipes = computed(() => {
 
 const hasMore = computed(() => displayRecipes.value.length < allFilteredRecipes.value.length)
 
-const allRecipeTitles = computed(() => {
+const stableRecipeList = computed(() => {
+  const seen = new Set()
+  const result = []
+  allRecipes.value.forEach(r => {
+    if (!seen.has(r.id)) {
+      seen.add(r.id)
+      result.push(r)
+    }
+  })
   if (sortBy.value === 'hot' && loadedHotDimensions.value.has(hotDimension.value)) {
     const hotList = hotRecipesMap.value[hotDimension.value] || []
-    return [...hotList, ...allRecipes.value]
+    hotList.forEach(r => {
+      if (!seen.has(r.id)) {
+        seen.add(r.id)
+        result.push(r)
+      }
+    })
   }
-  return allRecipes.value
+  return result
+})
+
+const allRecipeTitles = computed(() => {
+  return stableRecipeList.value
 })
 
 const searchSuggestions = computed(() => {
@@ -334,9 +353,20 @@ watch([filters, sortBy], () => {
   currentPage.value = 1
 })
 
-watch(() => filters.value.keyword, () => {
-  activeSuggestionIndex.value = -1
-  showSuggestions.value = filters.value.keyword.trim().length > 0
+watch(() => filters.value.keyword, (newVal, oldVal) => {
+  const newKeyword = newVal.trim().toLowerCase()
+  const oldKeyword = oldVal ? oldVal.trim().toLowerCase() : ''
+  
+  if (newKeyword !== oldKeyword) {
+    if (keywordChangeTimer) {
+      clearTimeout(keywordChangeTimer)
+    }
+    keywordChangeTimer = setTimeout(() => {
+      lastKeyword = newKeyword
+      activeSuggestionIndex.value = -1
+    }, 100)
+  }
+  showSuggestions.value = newKeyword.length > 0
 })
 
 const handleLayoutChange = (newLayout) => {
@@ -410,26 +440,52 @@ const handleSearch = () => {
 const handleKeydown = (e) => {
   if (!showSuggestions.value || searchSuggestions.value.length === 0) return
 
+  const suggestionCount = searchSuggestions.value.length
+
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    activeSuggestionIndex.value = (activeSuggestionIndex.value + 1) % searchSuggestions.value.length
+    e.stopPropagation()
+    if (keywordChangeTimer) {
+      clearTimeout(keywordChangeTimer)
+      keywordChangeTimer = null
+    }
+    if (activeSuggestionIndex.value >= suggestionCount - 1) {
+      activeSuggestionIndex.value = 0
+    } else {
+      activeSuggestionIndex.value = Math.max(0, activeSuggestionIndex.value + 1)
+    }
     scrollActiveSuggestionIntoView()
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
-    if (activeSuggestionIndex.value === -1) {
-      activeSuggestionIndex.value = searchSuggestions.value.length - 1
+    e.stopPropagation()
+    if (keywordChangeTimer) {
+      clearTimeout(keywordChangeTimer)
+      keywordChangeTimer = null
+    }
+    if (activeSuggestionIndex.value <= 0) {
+      activeSuggestionIndex.value = suggestionCount - 1
     } else {
-      activeSuggestionIndex.value = (activeSuggestionIndex.value - 1 + searchSuggestions.value.length) % searchSuggestions.value.length
+      activeSuggestionIndex.value = Math.min(suggestionCount - 1, activeSuggestionIndex.value - 1)
     }
     scrollActiveSuggestionIntoView()
   } else if (e.key === 'Enter') {
     e.preventDefault()
-    if (activeSuggestionIndex.value >= 0 && activeSuggestionIndex.value < searchSuggestions.value.length) {
-      goToRecipeDetail(searchSuggestions.value[activeSuggestionIndex.value])
+    e.stopPropagation()
+    const currentIndex = activeSuggestionIndex.value
+    if (currentIndex >= 0 && currentIndex < suggestionCount && searchSuggestions.value[currentIndex]) {
+      const recipe = searchSuggestions.value[currentIndex]
+      if (recipe && recipe.id) {
+        goToRecipeDetail(recipe)
+      }
     }
   } else if (e.key === 'Escape') {
+    e.preventDefault()
     showSuggestions.value = false
     activeSuggestionIndex.value = -1
+    if (keywordChangeTimer) {
+      clearTimeout(keywordChangeTimer)
+      keywordChangeTimer = null
+    }
   }
 }
 
@@ -443,19 +499,37 @@ const scrollActiveSuggestionIntoView = async () => {
 }
 
 const goToRecipeDetail = (recipe) => {
+  if (!recipe || !recipe.id) {
+    console.warn('无效的菜谱数据:', recipe)
+    return
+  }
   showSuggestions.value = false
   activeSuggestionIndex.value = -1
-  router.push(`/recipe/${recipe.id}`)
+  if (keywordChangeTimer) {
+    clearTimeout(keywordChangeTimer)
+    keywordChangeTimer = null
+  }
+  try {
+    router.push(`/recipe/${recipe.id}`)
+  } catch (e) {
+    console.error('路由跳转失败:', e)
+  }
 }
 
 const handleSuggestionHover = (index) => {
-  activeSuggestionIndex.value = index
+  const count = searchSuggestions.value.length
+  if (index >= 0 && index < count) {
+    activeSuggestionIndex.value = index
+  }
 }
 
-const handleSearchBlur = () => {
+const handleSearchBlur = (e) => {
   setTimeout(() => {
-    showSuggestions.value = false
-  }, 150)
+    if (document.activeElement !== searchInputRef.value && 
+        !suggestionListRef.value?.contains(document.activeElement)) {
+      showSuggestions.value = false
+    }
+  }, 100)
 }
 
 const handleSearchFocus = () => {
