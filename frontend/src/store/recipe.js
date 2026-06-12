@@ -50,6 +50,7 @@ export const useRecipeStore = defineStore('recipe', () => {
   const hotRecipes = ref([])
   const loading = ref(false)
   const favoriteVersion = ref(0)
+  const tagVersion = ref(0)
 
   const timers = ref(loadTimersFromStorage())
   const tags = ref(loadTagsFromStorage())
@@ -164,10 +165,13 @@ export const useRecipeStore = defineStore('recipe', () => {
       console.warn('调用后端取消收藏接口失败，继续本地更新', e)
     }
     favorites.value = favorites.value.filter(f => f.id !== id)
-    delete recipeTags.value[id]
+    const newRecipeTags = { ...recipeTags.value }
+    delete newRecipeTags[id]
+    recipeTags.value = newRecipeTags
     saveRecipeTagsToStorage()
     updateRecipeFavoriteCount(id, -1)
     favoriteVersion.value++
+    tagVersion.value++
   }
 
   const removeFavoritesBatch = async (ids) => {
@@ -179,19 +183,23 @@ export const useRecipeStore = defineStore('recipe', () => {
       console.warn('调用后端批量取消收藏接口失败，继续本地更新', e)
     }
     favorites.value = favorites.value.filter(f => !validIds.includes(f.id))
+    const newRecipeTags = { ...recipeTags.value }
     validIds.forEach(id => {
-      delete recipeTags.value[id]
+      delete newRecipeTags[id]
       updateRecipeFavoriteCount(id, -1)
     })
+    recipeTags.value = newRecipeTags
     saveRecipeTagsToStorage()
     favoriteVersion.value++
+    tagVersion.value++
   }
 
   const addTag = (tagName) => {
     const name = tagName.trim()
     if (!name) return null
-    if (tags.value.find(t => t.name === name)) {
-      return tags.value.find(t => t.name === name)
+    const existing = tags.value.find(t => t.name === name)
+    if (existing) {
+      return existing
     }
     const newTag = {
       id: Date.now().toString(),
@@ -199,6 +207,7 @@ export const useRecipeStore = defineStore('recipe', () => {
       color: getRandomTagColor()
     }
     tags.value.push(newTag)
+    tagVersion.value++
     return newTag
   }
 
@@ -211,14 +220,19 @@ export const useRecipeStore = defineStore('recipe', () => {
       return false
     }
     tag.name = name
+    tagVersion.value++
     return true
   }
 
   const deleteTag = (tagId) => {
     tags.value = tags.value.filter(t => t.id !== tagId)
-    Object.keys(recipeTags.value).forEach(recipeId => {
-      recipeTags.value[recipeId] = recipeTags.value[recipeId].filter(id => id !== tagId)
+    const newRecipeTags = { ...recipeTags.value }
+    Object.keys(newRecipeTags).forEach(recipeId => {
+      newRecipeTags[recipeId] = newRecipeTags[recipeId].filter(id => id !== tagId)
     })
+    recipeTags.value = newRecipeTags
+    saveRecipeTagsToStorage()
+    tagVersion.value++
   }
 
   const getRandomTagColor = () => {
@@ -230,17 +244,25 @@ export const useRecipeStore = defineStore('recipe', () => {
   }
 
   const addTagToRecipe = (recipeId, tagId) => {
-    if (!recipeTags.value[recipeId]) {
-      recipeTags.value[recipeId] = []
+    const newRecipeTags = { ...recipeTags.value }
+    if (!newRecipeTags[recipeId]) {
+      newRecipeTags[recipeId] = []
     }
-    if (!recipeTags.value[recipeId].includes(tagId)) {
-      recipeTags.value[recipeId].push(tagId)
+    if (!newRecipeTags[recipeId].includes(tagId)) {
+      newRecipeTags[recipeId] = [...newRecipeTags[recipeId], tagId]
+      recipeTags.value = newRecipeTags
+      saveRecipeTagsToStorage()
+      tagVersion.value++
     }
   }
 
   const removeTagFromRecipe = (recipeId, tagId) => {
     if (recipeTags.value[recipeId]) {
-      recipeTags.value[recipeId] = recipeTags.value[recipeId].filter(id => id !== tagId)
+      const newRecipeTags = { ...recipeTags.value }
+      newRecipeTags[recipeId] = newRecipeTags[recipeId].filter(id => id !== tagId)
+      recipeTags.value = newRecipeTags
+      saveRecipeTagsToStorage()
+      tagVersion.value++
     }
   }
 
@@ -277,6 +299,7 @@ export const useRecipeStore = defineStore('recipe', () => {
     hotRecipes,
     loading,
     favoriteVersion,
+    tagVersion,
     timers,
     tags,
     recipeTags,

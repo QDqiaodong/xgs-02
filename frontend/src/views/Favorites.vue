@@ -251,10 +251,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
+import { recipeApi } from '@/utils/api'
 
 const router = useRouter()
 const store = useRecipeStore()
@@ -276,15 +277,29 @@ const showTagDialog = ref(false)
 const currentTagRecipe = ref(null)
 const quickNewTagName = ref('')
 
-const favorites = ref([
-  { id: 1, title: '红烧五花肉', description: '经典家常菜，肥而不腻，入口即化', coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=200&h=150&fit=crop', difficulty: 2, cookTime: 60, author: '美食达人', favoriteCount: 1286 },
-  { id: 2, title: '番茄炒蛋', description: '最简单也最困难的国民家常菜', coverImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=150&fit=crop', difficulty: 1, cookTime: 15, author: '小厨神', favoriteCount: 2341 },
-  { id: 3, title: '宫保鸡丁', description: '川菜经典，鸡肉滑嫩，花生酥脆', coverImage: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?w=200&h=150&fit=crop', difficulty: 2, cookTime: 30, author: '川菜大师', favoriteCount: 1892 }
-])
+const favorites = ref([])
 
-const tags = computed(() => store.tags)
+const loadFavorites = async () => {
+  loading.value = true
+  try {
+    const result = await recipeApi.getFavorites()
+    favorites.value = result?.data || []
+    store.setFavorites(favorites.value)
+  } catch (e) {
+    console.error('加载收藏列表失败', e)
+    ElMessage.error('加载收藏列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const tags = computed(() => {
+  store.tagVersion
+  return store.tags
+})
 
 const filteredFavorites = computed(() => {
+  store.tagVersion
   if (selectedTagId.value === null) {
     return favorites.value
   }
@@ -295,6 +310,7 @@ const filteredFavorites = computed(() => {
 })
 
 const untaggedCount = computed(() => {
+  store.tagVersion
   return favorites.value.filter(r => store.getRecipeTagIds(r.id).length === 0).length
 })
 
@@ -303,8 +319,12 @@ const selectAll = computed({
   set: () => {}
 })
 
+watch(() => store.favoriteVersion, () => {
+  loadFavorites()
+})
+
 onMounted(() => {
-  store.setFavorites(favorites.value)
+  loadFavorites()
 })
 
 const getDifficultyLabel = (level) => {
@@ -313,15 +333,18 @@ const getDifficultyLabel = (level) => {
 }
 
 const getRecipeTags = (recipeId) => {
+  store.tagVersion
   return store.getRecipeTags(recipeId)
 }
 
 const getTagRecipeCount = (tagId) => {
+  store.tagVersion
   return store.getTagRecipeCount(tagId)
 }
 
 const isRecipeHasTag = (recipeId, tagId) => {
   if (!recipeId) return false
+  store.tagVersion
   return store.getRecipeTagIds(recipeId).includes(tagId)
 }
 
