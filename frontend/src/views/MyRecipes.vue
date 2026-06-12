@@ -82,10 +82,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
+import { recipeApi } from '@/utils/api'
 
 const router = useRouter()
 const store = useRecipeStore()
@@ -95,21 +96,37 @@ const route = useRoute()
 const activeTab = ref(route.query.tab === 'draft' ? 'draft' : 'published')
 const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=150&fit=crop'
 
-const publishedRecipes = ref([
-  { id: 1, title: '红烧五花肉', description: '经典家常菜，肥而不腻，入口即化', coverImage: 'https://images.unsplash.com/photo-1623689046286-01d812ba6d10?w=200&h=150&fit=crop', status: 'published', favoriteCount: 1286, viewCount: 5621, createdAt: '2024-01-15' },
-  { id: 2, title: '番茄炒蛋', description: '最简单也最困难的国民家常菜', coverImage: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&h=150&fit=crop', status: 'published', favoriteCount: 2341, viewCount: 8932, createdAt: '2024-01-18' }
-])
-
-const draftRecipes = ref([
-  { id: 101, title: '鱼香肉丝(未完成)', description: '川菜经典，酸甜咸辣', coverImage: '', status: 'draft', favoriteCount: 0, viewCount: 0, createdAt: '2024-01-20' }
-])
+const publishedRecipes = ref([])
+const draftRecipes = ref([])
 
 const currentList = computed(() => {
   return activeTab.value === 'published' ? publishedRecipes.value : draftRecipes.value
 })
 
+const fetchUserRecipes = async () => {
+  try {
+    loading.value = true
+    const result = await recipeApi.getUserRecipes()
+    if (result?.data) {
+      const allRecipes = Array.isArray(result.data) ? result.data : (result.data.list || [])
+      publishedRecipes.value = allRecipes.filter(r => r.status !== 'draft')
+      draftRecipes.value = allRecipes.filter(r => r.status === 'draft')
+      store.setUserRecipes(publishedRecipes.value)
+    }
+  } catch (error) {
+    console.error('获取我的菜谱失败:', error)
+    publishedRecipes.value = [...store.userRecipes]
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(() => {
-  store.setUserRecipes(publishedRecipes.value)
+  fetchUserRecipes()
+})
+
+watch(() => store.recipeVersion, () => {
+  fetchUserRecipes()
 })
 
 const goToDetail = (id) => {
@@ -133,10 +150,17 @@ const deleteRecipe = async (recipe) => {
       }
     )
     
+    try {
+      await recipeApi.deleteRecipe(recipe.id)
+    } catch (e) {
+      console.warn('调用后端删除接口失败，继续本地更新', e)
+    }
+
     if (isDraft) {
       draftRecipes.value = draftRecipes.value.filter(r => r.id !== recipe.id)
     } else {
       publishedRecipes.value = publishedRecipes.value.filter(r => r.id !== recipe.id)
+      store.removeRecipeFromStore(recipe.id)
     }
     
     ElMessage.success(isDraft ? '删除成功' : '已下架')

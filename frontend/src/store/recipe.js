@@ -64,6 +64,7 @@ export const useRecipeStore = defineStore('recipe', () => {
   const loading = ref(false)
   const favoriteVersion = ref(0)
   const tagVersion = ref(0)
+  const recipeVersion = ref(0)
 
   const timers = ref(loadTimersFromStorage())
   const tags = ref(loadTagsFromStorage())
@@ -343,6 +344,22 @@ export const useRecipeStore = defineStore('recipe', () => {
     hotRecipes.value = data
   }
 
+  const addRecipeToStore = (recipe) => {
+    userRecipes.value = [recipe, ...userRecipes.value]
+    recipes.value = [recipe, ...recipes.value]
+    recipeVersion.value++
+  }
+
+  const removeRecipeFromStore = (recipeId) => {
+    userRecipes.value = userRecipes.value.filter(r => r.id !== recipeId)
+    recipes.value = recipes.value.filter(r => r.id !== recipeId)
+    recipeVersion.value++
+  }
+
+  const bumpRecipeVersion = () => {
+    recipeVersion.value++
+  }
+
   const setLoading = (status) => {
     loading.value = status
   }
@@ -356,6 +373,7 @@ export const useRecipeStore = defineStore('recipe', () => {
     loading,
     favoriteVersion,
     tagVersion,
+    recipeVersion,
     timers,
     tags,
     recipeTags,
@@ -372,6 +390,9 @@ export const useRecipeStore = defineStore('recipe', () => {
     updateRecipeFavoriteCount,
     setUserRecipes,
     setHotRecipes,
+    addRecipeToStore,
+    removeRecipeFromStore,
+    bumpRecipeVersion,
     setLoading,
     getTimerState,
     setTimerState,

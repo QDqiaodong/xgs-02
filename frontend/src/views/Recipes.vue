@@ -220,6 +220,31 @@ watch(
   }
 )
 
+watch(
+  () => store.recipeVersion,
+  async () => {
+    try {
+      const result = await recipeApi.getRecipes({ page: 1, size: 100 })
+      if (result?.data) {
+        const list = Array.isArray(result.data) ? result.data : (result.data.list || [])
+        allRecipes.value = list.map(r => ({
+          ...r,
+          tags: typeof r.tags === 'string' ? r.tags.split(',') : (r.tags || [])
+        }))
+      }
+    } catch (e) {
+      console.log('刷新菜谱列表失败，保持当前数据')
+    }
+    loadedHotDimensions.value.clear()
+    hotRecipesMap.value = {}
+    try {
+      await loadHotRecipes(hotDimension.value)
+    } catch (e) {
+      console.log('刷新热门榜单失败')
+    }
+  }
+)
+
 const showSuggestions = ref(false)
 const activeSuggestionIndex = ref(-1)
 const searchInputRef = ref(null)

@@ -191,11 +191,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { recipeApi } from '@/utils/api'
+import { useRecipeStore } from '@/store/recipe'
 
 const router = useRouter()
+const store = useRecipeStore()
 
 const loading = ref(true)
 const profile = ref({
@@ -232,6 +234,10 @@ const goToDrafts = () => {
 }
 
 onMounted(() => {
+  fetchProfile()
+})
+
+watch(() => store.recipeVersion, () => {
   fetchProfile()
 })
 </script>

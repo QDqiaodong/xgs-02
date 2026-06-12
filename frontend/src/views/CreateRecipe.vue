@@ -182,9 +182,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import IngredientsTable from '@/components/IngredientsTable.vue'
 import { recipeApi } from '@/utils/api'
+import { useRecipeStore } from '@/store/recipe'
 
 const route = useRoute()
 const router = useRouter()
+const store = useRecipeStore()
 
 const isEdit = ref(!!route.params.id)
 const fileInput = ref(null)
@@ -420,12 +422,43 @@ const handleSubmit = async () => {
   
   try {
     const stepsData = prepareStepsForSubmit()
-    console.log('提交的步骤数据:', stepsData)
-    
-    ElMessage.success(isEdit.value ? '菜谱已更新' : '菜谱发布成功')
-    setTimeout(() => {
-      router.push('/my-recipes')
-    }, 1000)
+    const payload = {
+      title: form.title,
+      description: form.description,
+      cookTime: form.cookTime,
+      difficulty: form.difficulty,
+      author: form.author,
+      tags: form.tags.join(','),
+      coverImage: form.coverImage,
+      ingredients: JSON.stringify(form.ingredients),
+      steps: JSON.stringify(stepsData),
+      tips: form.tips
+    }
+
+    if (isEdit.value) {
+      await recipeApi.updateRecipe(route.params.id, payload)
+      ElMessage.success('菜谱已更新')
+      store.bumpRecipeVersion()
+    } else {
+      const result = await recipeApi.createRecipe(payload)
+      const newRecipe = result?.data || {
+        id: Date.now(),
+        title: form.title,
+        description: form.description,
+        coverImage: form.coverImage,
+        difficulty: parseInt(form.difficulty),
+        cookTime: parseInt(form.cookTime),
+        tags: form.tags,
+        author: form.author || '美食达人',
+        favoriteCount: 0,
+        viewCount: 0,
+        createdAt: new Date().toISOString().split('T')[0],
+        status: 'published'
+      }
+      store.addRecipeToStore(newRecipe)
+      ElMessage.success('菜谱发布成功')
+    }
+    router.push('/my-recipes')
   } catch (err) {
     console.error('提交失败', err)
     ElMessage.error('提交失败，请重试')
