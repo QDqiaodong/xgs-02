@@ -122,4 +122,9 @@ export const ratingApi = {
   rateRecipe: (recipeId, score) => api.post('/ratings', { recipeId, score })
 }
 
+export const posterApi = {
+  getRecipePoster: (recipeId) =>
+    api.get(`/posters/recipe/${recipeId}`, { responseType: 'blob' })
+}
+
 export default api

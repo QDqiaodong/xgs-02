@@ -329,6 +329,48 @@
   <div v-else class="loading-full">
     <div class="spinner"></div>
   </div>
+
+  <div v-if="showShareModal" class="share-modal-overlay no-print" @click.self="closeShareModal">
+    <div class="share-modal">
+      <div class="share-modal-header">
+        <h3>分享海报</h3>
+        <button class="close-btn" @click="closeShareModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="share-modal-body">
+        <div v-if="loadingPoster" class="poster-loading">
+          <div class="spinner"></div>
+          <span>正在生成海报...</span>
+        </div>
+        <div v-else-if="posterImageUrl" class="poster-preview">
+          <img :src="posterImageUrl" alt="分享海报" />
+          <div class="poster-tip">长按图片保存到相册</div>
+        </div>
+        <div v-else class="poster-error">
+          <span>海报生成失败</span>
+        </div>
+      </div>
+      <div class="share-modal-footer">
+        <button class="btn btn-outline" @click="closeShareModal">关闭</button>
+        <button 
+          class="btn btn-primary" 
+          @click="downloadPoster"
+          :disabled="loadingPoster || !posterImageUrl"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          下载海报
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -339,7 +381,7 @@ import { useRecipeStore } from '@/store/recipe'
 import StepTimer from '@/components/StepTimer.vue'
 import RecipeCard from '@/components/RecipeCard.vue'
 import StarRating from '@/components/StarRating.vue'
-import { recipeApi, ingredientNutritionApi, shoppingListApi, ratingApi } from '@/utils/api'
+import { recipeApi, ingredientNutritionApi, shoppingListApi, ratingApi, posterApi } from '@/utils/api'
 
 const route = useRoute()
 const store = useRecipeStore()
@@ -356,6 +398,10 @@ const ratingStats = ref(null)
 const loadingRating = ref(false)
 const userRating = ref(0)
 const submittingRating = ref(false)
+
+const showShareModal = ref(false)
+const posterImageUrl = ref('')
+const loadingPoster = ref(false)
 
 const minServings = 1
 const maxServings = 20
@@ -731,8 +777,43 @@ const toggleFavorite = async () => {
   }
 }
 
-const shareRecipe = () => {
-  ElMessage.info('分享功能开发中')
+const shareRecipe = async () => {
+  if (!recipe.value?.id) return
+  showShareModal.value = true
+  if (!posterImageUrl.value) {
+    await generatePoster()
+  }
+}
+
+const generatePoster = async () => {
+  if (!recipe.value?.id) return
+  loadingPoster.value = true
+  posterImageUrl.value = ''
+  try {
+    const response = await posterApi.getRecipePoster(recipe.value.id)
+    const blob = new Blob([response], { type: 'image/png' })
+    posterImageUrl.value = URL.createObjectURL(blob)
+  } catch (err) {
+    console.error('生成海报失败', err)
+    ElMessage.error('生成海报失败，请稍后重试')
+  } finally {
+    loadingPoster.value = false
+  }
+}
+
+const downloadPoster = () => {
+  if (!posterImageUrl.value) return
+  const link = document.createElement('a')
+  link.href = posterImageUrl.value
+  link.download = `食谱海报-${recipe.value?.title || 'recipe'}.png`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  ElMessage.success('海报已下载')
+}
+
+const closeShareModal = () => {
+  showShareModal.value = false
 }
 
 const printRecipe = () => {
@@ -1849,6 +1930,179 @@ const handleStepImageError = (e) => {
 
   .detail-content > * {
     page-break-inside: avoid;
+  }
+}
+
+.share-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.share-modal {
+  background: white;
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.share-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .close-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    &:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+  }
+}
+
+.share-modal-body {
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.poster-loading,
+.poster-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--text-secondary);
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.poster-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+
+  img {
+    width: 100%;
+    max-width: 360px;
+    height: auto;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  .poster-tip {
+    font-size: 13px;
+    color: var(--text-light);
+    text-align: center;
+  }
+}
+
+.share-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-color);
+
+  .btn {
+    flex: 1;
+    justify-content: center;
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .share-modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .share-modal {
+    max-width: 100%;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 92vh;
+
+    .share-modal-header {
+      padding: 16px 20px;
+    }
+
+    .share-modal-body {
+      padding: 20px;
+    }
+
+    .share-modal-footer {
+      padding: 16px 20px;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
   }
 }
 </style>
