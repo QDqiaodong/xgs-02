@@ -2,6 +2,7 @@ package com.recipe.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -26,6 +27,10 @@ public class Recipe {
     private Integer favoriteCount;
 
     private Integer viewCount;
+
+    private BigDecimal averageRating;
+
+    private Integer ratingCount;
 
     private String tags;
 

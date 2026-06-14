@@ -117,4 +117,9 @@ export const ingredientNutritionApi = {
   calculateRecipeNutritionById: (recipeId) => api.get(`/ingredient-nutrition/recipe/${recipeId}`)
 }
 
+export const ratingApi = {
+  getRatingStats: (recipeId) => api.get(`/ratings/recipe/${recipeId}`),
+  rateRecipe: (recipeId, score) => api.post('/ratings', { recipeId, score })
+}
+
 export default api

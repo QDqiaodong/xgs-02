@@ -23,6 +23,10 @@
               <span class="meta-icon">❤️</span>
               <span>{{ recipe.favoriteCount }}收藏</span>
             </div>
+            <div class="meta-item rating-item">
+              <span class="meta-icon">⭐</span>
+              <span>{{ recipe.averageRating || '0.0' }}分 ({{ recipe.ratingCount || 0 }}人评价)</span>
+            </div>
           </div>
           
           <div class="recipe-tags">
@@ -43,6 +47,21 @@
               </svg>
               {{ isFavorited ? '已收藏' : '收藏菜谱' }}
             </button>
+            <div class="btn-rating-wrapper">
+              <span class="rating-label">给这道菜打分：</span>
+              <StarRating
+                v-if="ratingStats"
+                v-model="userRating"
+                :average-score="ratingStats.averageScore"
+                :rating-count="ratingStats.ratingCount"
+                :show-text="false"
+                :readonly="submittingRating"
+                @rate="handleRate"
+              />
+              <div v-else-if="loadingRating" class="rating-loading">
+                <div class="spinner spinner-sm"></div>
+              </div>
+            </div>
             <button 
               class="btn btn-outline btn-shopping" 
               @click="addToShoppingList"
@@ -319,7 +338,8 @@ import { ElMessage } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
 import StepTimer from '@/components/StepTimer.vue'
 import RecipeCard from '@/components/RecipeCard.vue'
-import { recipeApi, ingredientNutritionApi, shoppingListApi } from '@/utils/api'
+import StarRating from '@/components/StarRating.vue'
+import { recipeApi, ingredientNutritionApi, shoppingListApi, ratingApi } from '@/utils/api'
 
 const route = useRoute()
 const store = useRecipeStore()
@@ -331,6 +351,11 @@ const defaultImage = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?
 
 const nutritionData = ref(null)
 const loadingNutrition = ref(false)
+
+const ratingStats = ref(null)
+const loadingRating = ref(false)
+const userRating = ref(0)
+const submittingRating = ref(false)
 
 const minServings = 1
 const maxServings = 20
@@ -368,6 +393,12 @@ const parseRecipeData = (data) => {
     }
   } else if (!result.steps) {
     result.steps = []
+  }
+  if (result.averageRating === undefined || result.averageRating === null) {
+    result.averageRating = '0.0'
+  }
+  if (result.ratingCount === undefined || result.ratingCount === null) {
+    result.ratingCount = 0
   }
   if (result.ingredients && result.ingredients.length > 0) {
     const firstItem = result.ingredients[0]
@@ -597,10 +628,51 @@ const loadRecipe = async () => {
     if (recipe.value) {
       loadSimilarRecipes()
       loadNutritionData()
+      loadRatingStats()
     }
   } catch (err) {
     console.error('加载食谱详情失败', err)
     ElMessage.error('加载食谱失败')
+  }
+}
+
+const loadRatingStats = async () => {
+  if (!recipe.value?.id) return
+  loadingRating.value = true
+  try {
+    const result = await ratingApi.getRatingStats(recipe.value.id)
+    ratingStats.value = result?.data || null
+    if (ratingStats.value?.userRating) {
+      userRating.value = ratingStats.value.userRating
+    }
+    if (recipe.value && ratingStats.value) {
+      recipe.value.averageRating = ratingStats.value.averageScore
+      recipe.value.ratingCount = ratingStats.value.ratingCount
+    }
+  } catch (err) {
+    console.error('加载评分数据失败', err)
+  } finally {
+    loadingRating.value = false
+  }
+}
+
+const handleRate = async (score) => {
+  if (!recipe.value?.id || submittingRating.value) return
+  submittingRating.value = true
+  try {
+    const result = await ratingApi.rateRecipe(recipe.value.id, score)
+    ratingStats.value = result?.data || null
+    if (ratingStats.value) {
+      userRating.value = score
+      recipe.value.averageRating = ratingStats.value.averageScore
+      recipe.value.ratingCount = ratingStats.value.ratingCount
+    }
+    ElMessage.success(`评分成功，您给了${score}星`)
+  } catch (err) {
+    console.error('评分失败', err)
+    ElMessage.error('评分失败，请稍后重试')
+  } finally {
+    submittingRating.value = false
   }
 }
 
@@ -745,6 +817,48 @@ const handleStepImageError = (e) => {
 .action-buttons {
   display: flex;
   gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn-rating-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: var(--primary-color);
+  }
+}
+
+.rating-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.rating-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 24px;
+}
+
+.spinner-sm {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
+.rating-item {
+  color: #f59e0b !important;
+  font-weight: 500;
 }
 
 .btn {
@@ -1265,6 +1379,16 @@ const handleStepImageError = (e) => {
       padding: 14px 16px;
       min-height: 48px;
     }
+  }
+
+  .btn-rating-wrapper {
+    width: 100%;
+    justify-content: center;
+    order: -1;
+  }
+
+  .rating-label {
+    font-size: 13px;
   }
 
   .ingredients-header {
