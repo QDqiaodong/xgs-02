@@ -2,6 +2,7 @@ package com.recipe.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.recipe.dto.RecipeDTO;
+import com.recipe.dto.RecipeDetailDTO;
 import com.recipe.entity.Recipe;
 
 import java.util.List;
@@ -15,6 +16,10 @@ public interface RecipeService {
     Page<Recipe> getRecipePage(Integer page, Integer size, String keyword, String cuisine, String scene, Integer difficulty);
 
     Recipe getRecipeDetail(Long id);
+
+    RecipeDetailDTO getRecipeDetailWithAdjustment(Long id);
+
+    RecipeDetailDTO getRecipeDetailWithAdjustment(Long id, Long profileId);
 
     Recipe createRecipe(RecipeDTO dto);
 

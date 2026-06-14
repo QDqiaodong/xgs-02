@@ -3,6 +3,7 @@ package com.recipe.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.recipe.common.Result;
 import com.recipe.dto.RecipeDTO;
+import com.recipe.dto.RecipeDetailDTO;
 import com.recipe.entity.Recipe;
 import com.recipe.service.RecipeService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,16 @@ public class RecipeController {
     @GetMapping("/{id}")
     public Result<Recipe> getRecipeDetail(@PathVariable Long id) {
         return Result.success(recipeService.getRecipeDetail(id));
+    }
+
+    @GetMapping("/{id}/with-adjustment")
+    public Result<RecipeDetailDTO> getRecipeDetailWithAdjustment(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long profileId) {
+        if (profileId != null) {
+            return Result.success(recipeService.getRecipeDetailWithAdjustment(id, profileId));
+        }
+        return Result.success(recipeService.getRecipeDetailWithAdjustment(id));
     }
 
     @PostMapping

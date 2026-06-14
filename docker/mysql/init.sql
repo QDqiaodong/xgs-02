@@ -194,3 +194,29 @@ INSERT INTO ingredient_nutrition (name, alias, calories, protein, fat, carbohydr
 ('姜片', '生姜片', 41.00, 1.30, 0.60, 7.60, 2.70, 15.00, '调味品', 'g', '生姜切片'),
 ('蒜末', '大蒜末,蒜泥', 128.00, 4.50, 0.20, 26.50, 1.10, 5.50, '调味品', 'g', '大蒜切末'),
 ('葱姜蒜', '葱姜蒜组合', 63.00, 2.50, 0.40, 13.10, 1.70, 8.40, '调味品', 'g', '混合估算');
+
+CREATE TABLE IF NOT EXISTS family_taste_profile (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    profile_name VARCHAR(100) NOT NULL COMMENT '档案名称',
+    low_oil TINYINT DEFAULT 0 COMMENT '是否少油:0-否,1-是',
+    low_salt TINYINT DEFAULT 0 COMMENT '是否低盐:0-否,1-是',
+    low_sugar TINYINT DEFAULT 0 COMMENT '是否低糖:0-否,1-是',
+    no_spicy TINYINT DEFAULT 0 COMMENT '是否忌辣:0-否,1-是',
+    light_spicy TINYINT DEFAULT 0 COMMENT '是否微辣:0-否,1-是',
+    medium_spicy TINYINT DEFAULT 0 COMMENT '是否中辣:0-否,1-是',
+    heavy_spicy TINYINT DEFAULT 1 COMMENT '是否重辣:0-否,1-是',
+    taste_preferences VARCHAR(500) COMMENT '口味偏好描述',
+    dietary_notes VARCHAR(500) COMMENT '饮食备注',
+    is_default TINYINT DEFAULT 0 COMMENT '是否默认:0-否,1-是',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除:0-未删,1-已删',
+    INDEX idx_user (user_id, deleted),
+    INDEX idx_default (user_id, is_default, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='家庭口味档案表';
+
+INSERT INTO family_taste_profile (user_id, profile_name, low_oil, low_salt, low_sugar, no_spicy, light_spicy, medium_spicy, heavy_spicy, taste_preferences, dietary_notes, is_default) VALUES
+(1, '默认口味', 0, 0, 0, 0, 0, 0, 1, '正常口味，无特殊偏好', '', 1),
+(1, '清淡健康', 1, 1, 1, 1, 0, 0, 0, '少油少盐少糖，完全不辣', '适合老人小孩，注重健康饮食', 0),
+(1, '微辣家常', 0, 0, 0, 0, 1, 0, 0, '喜欢微辣，口味适中', '', 0);

@@ -4,9 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.recipe.dto.FlavorAdjustmentDTO;
 import com.recipe.dto.RecipeDTO;
+import com.recipe.dto.RecipeDetailDTO;
 import com.recipe.entity.Recipe;
 import com.recipe.mapper.RecipeMapper;
+import com.recipe.service.FamilyTasteProfileService;
 import com.recipe.service.RecipeService;
 import com.recipe.service.ViewHistoryService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,7 @@ public class RecipeServiceImpl implements RecipeService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
     private final ViewHistoryService viewHistoryService;
+    private final FamilyTasteProfileService familyTasteProfileService;
 
     private static final String HOT_RECIPE_KEY_PREFIX = "recipe:rank:v2:";
     private static final String HOT_RECIPE_KEY_WEEKLY = HOT_RECIPE_KEY_PREFIX + "weekly";
@@ -264,6 +268,56 @@ public class RecipeServiceImpl implements RecipeService {
             }
         }
         return recipe;
+    }
+
+    @Override
+    public RecipeDetailDTO getRecipeDetailWithAdjustment(Long id) {
+        return getRecipeDetailWithAdjustment(id, null);
+    }
+
+    @Override
+    public RecipeDetailDTO getRecipeDetailWithAdjustment(Long id, Long profileId) {
+        Recipe recipe = getRecipeDetail(id);
+        if (recipe == null) {
+            return null;
+        }
+
+        RecipeDetailDTO dto = new RecipeDetailDTO();
+        dto.setId(recipe.getId());
+        dto.setTitle(recipe.getTitle());
+        dto.setDescription(recipe.getDescription());
+        dto.setCoverImage(recipe.getCoverImage());
+        dto.setAuthor(recipe.getAuthor());
+        dto.setCookTime(recipe.getCookTime());
+        dto.setDifficulty(recipe.getDifficulty());
+        dto.setFavoriteCount(recipe.getFavoriteCount());
+        dto.setViewCount(recipe.getViewCount());
+        dto.setAverageRating(recipe.getAverageRating());
+        dto.setRatingCount(recipe.getRatingCount());
+        dto.setTags(recipe.getTags());
+        dto.setIngredients(recipe.getIngredients());
+        dto.setSteps(recipe.getSteps());
+        dto.setTips(recipe.getTips());
+        dto.setStatus(recipe.getStatus());
+        dto.setIsDraft(recipe.getIsDraft());
+        dto.setCreatedAt(recipe.getCreatedAt());
+        dto.setUpdatedAt(recipe.getUpdatedAt());
+        dto.setDeleted(recipe.getDeleted());
+        dto.setViewTime(recipe.getViewTime());
+
+        try {
+            FlavorAdjustmentDTO adjustment;
+            if (profileId != null) {
+                adjustment = familyTasteProfileService.getFlavorAdjustmentByProfile(id, profileId);
+            } else {
+                adjustment = familyTasteProfileService.getFlavorAdjustment(id);
+            }
+            dto.setFlavorAdjustment(adjustment);
+        } catch (Exception e) {
+            log.warn("获取调味调整建议失败，recipeId={}", id, e);
+        }
+
+        return dto;
     }
 
     @Override
