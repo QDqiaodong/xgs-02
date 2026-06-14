@@ -55,6 +55,16 @@ const routes = [
     path: '/shopping-list',
     name: 'ShoppingList',
     component: () => import('@/views/ShoppingList.vue')
+  },
+  {
+    path: '/cooking-schedule',
+    name: 'CookingSchedule',
+    component: () => import('@/views/CookingSchedule.vue')
+  },
+  {
+    path: '/ingredient-conflict',
+    name: 'IngredientConflict',
+    component: () => import('@/views/IngredientConflict.vue')
   }
 ]
 

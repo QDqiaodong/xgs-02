@@ -127,4 +127,18 @@ export const posterApi = {
     api.get(`/posters/recipe/${recipeId}`, { responseType: 'blob' })
 }
 
+export const cookingScheduleApi = {
+  generateSchedule: (recipeId, mealTime) =>
+    api.get(`/cooking-schedule/recipe/${recipeId}`, { params: { mealTime } }),
+  generateCustomSchedule: (recipeTitle, stepsJson, mealTime) =>
+    api.post('/cooking-schedule/custom', { recipeTitle, stepsJson, mealTime })
+}
+
+export const ingredientConflictApi = {
+  checkRecipeConflicts: (recipeId, userPreference) =>
+    api.post(`/ingredient-conflict/check/recipe/${recipeId}`, userPreference),
+  checkIngredientConflicts: (ingredients, userPreference) =>
+    api.post('/ingredient-conflict/check/ingredients', { ingredients, userPreference })
+}
+
 export default api

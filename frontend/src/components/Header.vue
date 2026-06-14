@@ -10,6 +10,8 @@
         <nav class="nav">
           <router-link to="/" class="nav-link">首页</router-link>
           <router-link to="/recipes" class="nav-link">菜谱大全</router-link>
+          <router-link to="/cooking-schedule" class="nav-link">烹饪排程</router-link>
+          <router-link to="/ingredient-conflict" class="nav-link">食材校验</router-link>
           <router-link to="/favorites" class="nav-link">我的收藏</router-link>
           <router-link to="/shopping-list" class="nav-link">购物清单</router-link>
           <router-link to="/view-history" class="nav-link">浏览历史</router-link>
