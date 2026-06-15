@@ -141,4 +141,11 @@ export const ingredientConflictApi = {
     api.post('/ingredient-conflict/check/ingredients', { ingredients, userPreference })
 }
 
+export const recipeOperabilityApi = {
+  assessRecipe: (recipeId) =>
+    api.get(`/recipe-operability/assess/recipe/${recipeId}`).then((result) => result?.data || null),
+  assessCustomRecipe: (ingredients, steps, cookTime) =>
+    api.post('/recipe-operability/assess/custom', { ingredients, steps, cookTime }).then((result) => result?.data || null)
+}
+
 export default api

@@ -291,6 +291,246 @@
           </div>
         </div>
 
+        <div class="operability-section section-card no-print">
+          <div class="operability-header">
+            <div class="operability-title-wrapper">
+              <h2 class="section-title">📋 菜谱可操作性评估</h2>
+              <span class="operability-subtitle">AI智能分析步骤、食材和风险</span>
+            </div>
+            <button 
+              class="btn btn-outline btn-assess" 
+              @click="runOperabilityAssessment"
+              :disabled="loadingAssessment"
+            >
+              <span v-if="loadingAssessment" class="btn-spinner"></span>
+              {{ loadingAssessment ? '分析中...' : (assessmentData ? '重新评估' : '开始评估') }}
+            </button>
+          </div>
+
+          <div v-if="loadingAssessment" class="assessment-loading">
+            <div class="spinner"></div>
+            <span>正在深度分析菜谱可操作性...</span>
+          </div>
+
+          <div v-else-if="assessmentData" class="assessment-content">
+            <div class="overall-score-card" :class="'level-' + getLevelClass(assessmentData.overallLevel)">
+              <div class="score-ring-wrapper">
+                <div class="score-ring">
+                  <svg viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" stroke-width="10"/>
+                    <circle 
+                      cx="60" cy="60" r="52" 
+                      fill="none" 
+                      :stroke="getScoreColor(assessmentData.overallScore)" 
+                      stroke-width="10"
+                      stroke-linecap="round"
+                      :stroke-dasharray="`${(assessmentData.overallScore / 100) * 326.7} 326.7`"
+                      transform="rotate(-90 60 60)"
+                      class="score-circle"
+                    />
+                  </svg>
+                  <div class="score-text">
+                    <div class="score-number">{{ assessmentData.overallScore }}</div>
+                    <div class="score-label">综合评分</div>
+                  </div>
+                </div>
+              </div>
+              <div class="overall-info">
+                <div class="overall-level">
+                  <span class="level-badge">{{ assessmentData.overallLevel }}</span>
+                </div>
+                <div class="level-desc">{{ getLevelDescription(assessmentData.overallLevel) }}</div>
+                <div class="overall-stats">
+                  <div class="stat-item">
+                    <span class="stat-icon">📝</span>
+                    <span class="stat-value">{{ assessmentData.stepClarity.clearStepCount }}/{{ assessmentData.stepClarity.totalStepCount }}</span>
+                    <span class="stat-label">清晰步骤</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-icon">🥬</span>
+                    <span class="stat-value">{{ assessmentData.ingredientCompleteness.completeCount }}/{{ assessmentData.ingredientCompleteness.totalCount }}</span>
+                    <span class="stat-label">完整食材</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-icon" :class="assessmentData.riskWarnings.length > 0 ? 'warning' : ''">⚠️</span>
+                    <span class="stat-value">{{ assessmentData.riskWarnings.length }}</span>
+                    <span class="stat-label">风险提示</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="assessment-detail-grid">
+              <div class="detail-card step-clarity-card">
+                <div class="detail-card-header">
+                  <span class="detail-icon">📝</span>
+                  <h3 class="detail-title">步骤清晰度</h3>
+                  <div class="detail-score-badge" :class="getScoreClass(assessmentData.stepClarity.score)">
+                    {{ assessmentData.stepClarity.score }}分
+                  </div>
+                </div>
+                <div class="detail-level-tag">{{ assessmentData.stepClarity.level }}</div>
+                
+                <div class="clarity-features">
+                  <div class="feature-tag" :class="{ active: assessmentData.stepClarity.hasTimeDescription }">
+                    <span class="feature-icon">⏱️</span>
+                    时间描述 {{ assessmentData.stepClarity.hasTimeDescription ? '✓' : '✗' }}
+                  </div>
+                  <div class="feature-tag" :class="{ active: assessmentData.stepClarity.hasTemperatureDescription }">
+                    <span class="feature-icon">🔥</span>
+                    温度/火候 {{ assessmentData.stepClarity.hasTemperatureDescription ? '✓' : '✗' }}
+                  </div>
+                </div>
+
+                <div v-if="assessmentData.stepClarity.highlights && assessmentData.stepClarity.highlights.length > 0" class="highlights-section">
+                  <h4 class="subsection-title">✨ 亮点</h4>
+                  <ul class="item-list">
+                    <li v-for="(h, idx) in assessmentData.stepClarity.highlights" :key="'sh-' + idx" class="highlight-item">
+                      {{ h }}
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="assessmentData.stepClarity.issues && assessmentData.stepClarity.issues.length > 0" class="issues-section">
+                  <h4 class="subsection-title">💡 待改进</h4>
+                  <ul class="item-list">
+                    <li v-for="(i, idx) in assessmentData.stepClarity.issues" :key="'si-' + idx" class="issue-item">
+                      {{ i }}
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="detail-card ingredient-card">
+                <div class="detail-card-header">
+                  <span class="detail-icon">🥬</span>
+                  <h3 class="detail-title">用量完整度</h3>
+                  <div class="detail-score-badge" :class="getScoreClass(assessmentData.ingredientCompleteness.score)">
+                    {{ assessmentData.ingredientCompleteness.score }}分
+                  </div>
+                </div>
+                <div class="detail-level-tag">{{ assessmentData.ingredientCompleteness.level }}</div>
+
+                <div class="ingredient-progress">
+                  <div class="progress-bar-wrapper">
+                    <div 
+                      class="progress-fill-ingredient" 
+                      :style="{ width: (assessmentData.ingredientCompleteness.completeCount / assessmentData.ingredientCompleteness.totalCount * 100) + '%' }"
+                    ></div>
+                  </div>
+                  <div class="progress-text">
+                    {{ assessmentData.ingredientCompleteness.completeCount }} / {{ assessmentData.ingredientCompleteness.totalCount }} 种食材用量完整
+                  </div>
+                </div>
+
+                <div v-if="assessmentData.ingredientCompleteness.vagueIngredients && assessmentData.ingredientCompleteness.vagueIngredients.length > 0" class="vague-section">
+                  <h4 class="subsection-title">❓ 模糊用量食材</h4>
+                  <div class="vague-tags">
+                    <span v-for="(v, idx) in assessmentData.ingredientCompleteness.vagueIngredients" :key="'v-' + idx" class="vague-tag">
+                      {{ v }}
+                    </span>
+                  </div>
+                </div>
+
+                <div v-if="assessmentData.ingredientCompleteness.highlights && assessmentData.ingredientCompleteness.highlights.length > 0" class="highlights-section">
+                  <h4 class="subsection-title">✨ 亮点</h4>
+                  <ul class="item-list">
+                    <li v-for="(h, idx) in assessmentData.ingredientCompleteness.highlights" :key="'ih-' + idx" class="highlight-item">
+                      {{ h }}
+                    </li>
+                  </ul>
+                </div>
+
+                <div v-if="assessmentData.ingredientCompleteness.issues && assessmentData.ingredientCompleteness.issues.length > 0" class="issues-section">
+                  <h4 class="subsection-title">💡 待改进</h4>
+                  <ul class="item-list">
+                    <li v-for="(i, idx) in assessmentData.ingredientCompleteness.issues" :key="'ii-' + idx" class="issue-item">
+                      {{ i }}
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="assessmentData.riskWarnings && assessmentData.riskWarnings.length > 0" class="risk-section">
+              <div class="risk-section-header">
+                <h3 class="section-subtitle">⚠️ 风险提示</h3>
+                <span class="risk-count">{{ assessmentData.riskWarnings.length }}项</span>
+              </div>
+              <div class="risk-list">
+                <div 
+                  v-for="(r, idx) in assessmentData.riskWarnings" 
+                  :key="'r-' + idx" 
+                  class="risk-card"
+                  :class="'risk-' + getRiskLevelClass(r.level)"
+                >
+                  <div class="risk-card-header">
+                    <span class="risk-level-tag" :class="'tag-' + getRiskLevelClass(r.level)">
+                      {{ r.level }}
+                    </span>
+                    <span class="risk-category">{{ r.category }}</span>
+                  </div>
+                  <div class="risk-description">{{ r.description }}</div>
+                  <div class="risk-suggestion">
+                    <span class="suggestion-label">建议：</span>
+                    {{ r.suggestion }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="assessmentData.optimizationSuggestions && assessmentData.optimizationSuggestions.length > 0" class="optimization-section">
+              <div class="optimization-section-header">
+                <h3 class="section-subtitle">🚀 优化建议</h3>
+                <span class="optimization-count">{{ assessmentData.optimizationSuggestions.length }}条建议</span>
+              </div>
+              <div class="optimization-list">
+                <div 
+                  v-for="(o, idx) in assessmentData.optimizationSuggestions" 
+                  :key="'o-' + idx" 
+                  class="optimization-card"
+                >
+                  <div class="optimization-card-header">
+                    <span class="priority-tag" :class="'priority-' + getPriorityClass(o.priority)">
+                      {{ o.priority }}优先级
+                    </span>
+                    <span class="optimization-category">{{ o.category }}</span>
+                  </div>
+                  <div class="optimization-description">
+                    {{ o.description }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="assessment-empty">
+            <div class="empty-icon-wrapper">
+              <span class="empty-icon">📊</span>
+            </div>
+            <h3 class="empty-title">还未进行可操作性评估</h3>
+            <p class="empty-desc">点击上方「开始评估」按钮，AI将深度分析您的菜谱，提供步骤清晰度、用量完整度、风险提示和优化建议</p>
+            <div class="empty-features">
+              <div class="empty-feature">
+                <span class="empty-feature-icon">📝</span>
+                <span>分析步骤清晰度</span>
+              </div>
+              <div class="empty-feature">
+                <span class="empty-feature-icon">🥬</span>
+                <span>检查用量完整度</span>
+              </div>
+              <div class="empty-feature">
+                <span class="empty-feature-icon">⚠️</span>
+                <span>识别潜在风险</span>
+              </div>
+              <div class="empty-feature">
+                <span class="empty-feature-icon">🚀</span>
+                <span>提供优化建议</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="steps-section section-card" :class="{ 'kitchen-mode': kitchenModeEnabled }">
           <div class="steps-header-row">
             <h2 class="section-title">👨‍🍳 烹饪步骤</h2>
@@ -506,7 +746,7 @@ import { useRecipeStore } from '@/store/recipe'
 import StepTimer from '@/components/StepTimer.vue'
 import RecipeCard from '@/components/RecipeCard.vue'
 import StarRating from '@/components/StarRating.vue'
-import { recipeApi, ingredientNutritionApi, shoppingListApi, ratingApi, posterApi } from '@/utils/api'
+import { recipeApi, ingredientNutritionApi, shoppingListApi, ratingApi, posterApi, recipeOperabilityApi } from '@/utils/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -531,6 +771,9 @@ const loadingPoster = ref(false)
 
 const kitchenModeEnabled = ref(store.isKitchenMode())
 const currentStepIndex = ref(0)
+
+const loadingAssessment = ref(false)
+const assessmentData = ref(null)
 
 const minServings = 1
 const maxServings = 20
@@ -1066,6 +1309,80 @@ const isOverLimit = (type) => {
 
 const goToNutritionPage = () => {
   router.push('/ingredient-nutrition')
+}
+
+const runOperabilityAssessment = async () => {
+  if (!recipe.value?.id) {
+    ElMessage.warning('菜谱数据未加载完成')
+    return
+  }
+  loadingAssessment.value = true
+  try {
+    const result = await recipeOperabilityApi.assessRecipe(recipe.value.id)
+    if (result) {
+      assessmentData.value = result
+      ElMessage.success('评估完成！')
+    } else {
+      ElMessage.error('评估失败，请稍后重试')
+    }
+  } catch (err) {
+    console.error('可操作性评估失败', err)
+    ElMessage.error('评估失败，请稍后重试')
+  } finally {
+    loadingAssessment.value = false
+  }
+}
+
+const getLevelClass = (level) => {
+  const levelMap = {
+    '优秀': 'excellent',
+    '良好': 'good',
+    '一般': 'average',
+    '待改进': 'poor'
+  }
+  return levelMap[level] || 'average'
+}
+
+const getLevelDescription = (level) => {
+  const descMap = {
+    '优秀': '这是一份非常专业的菜谱，新手也能轻松复刻成功！',
+    '良好': '菜谱整体质量不错，稍加完善就能达到专业水平',
+    '一般': '菜谱基本可用，但有较多可以改进的地方',
+    '待改进': '建议完善菜谱的关键信息，提升可操作性'
+  }
+  return descMap[level] || ''
+}
+
+const getScoreColor = (score) => {
+  if (score >= 85) return '#10b981'
+  if (score >= 70) return '#3b82f6'
+  if (score >= 50) return '#f59e0b'
+  return '#ef4444'
+}
+
+const getScoreClass = (score) => {
+  if (score >= 85) return 'score-excellent'
+  if (score >= 70) return 'score-good'
+  if (score >= 50) return 'score-average'
+  return 'score-poor'
+}
+
+const getRiskLevelClass = (level) => {
+  const riskMap = {
+    '高风险': 'high',
+    '中风险': 'medium',
+    '低风险': 'low'
+  }
+  return riskMap[level] || 'low'
+}
+
+const getPriorityClass = (priority) => {
+  const priorityMap = {
+    '高': 'high',
+    '中': 'medium',
+    '低': 'low'
+  }
+  return priorityMap[priority] || 'low'
 }
 
 watch(kitchenModeEnabled, (val) => {
@@ -2875,6 +3192,749 @@ watch(kitchenModeEnabled, (val) => {
       font-size: 13px;
       padding: 6px 12px;
     }
+  }
+}
+
+.operability-section {
+  background: linear-gradient(135deg, #fafbff 0%, #f0f9ff 100%);
+  border: 1px solid #e0e7ff;
+}
+
+.operability-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.operability-title-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.operability-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.btn-assess {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  border: none;
+  font-weight: 500;
+  transition: all 0.3s ease;
+
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+  }
+}
+
+.assessment-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+  color: var(--text-secondary);
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border-width: 3px;
+  }
+
+  span {
+    font-size: 16px;
+    font-weight: 500;
+  }
+}
+
+.assessment-empty {
+  text-align: center;
+  padding: 48px 20px;
+}
+
+.empty-icon-wrapper {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 20px;
+  background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-icon {
+  font-size: 48px;
+}
+
+.empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.empty-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 500px;
+  margin: 0 auto 28px;
+}
+
+.empty-features {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.empty-feature {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
+  background: white;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.empty-feature-icon {
+  font-size: 28px;
+}
+
+.empty-feature span:last-child {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.overall-score-card {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 32px;
+  padding: 32px;
+  background: white;
+  border-radius: var(--radius-lg);
+  margin-bottom: 28px;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.08);
+  border: 2px solid transparent;
+
+  &.level-excellent {
+    border-color: #10b981;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4);
+  }
+  &.level-good {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, #ffffff, #eff6ff);
+  }
+  &.level-average {
+    border-color: #f59e0b;
+    background: linear-gradient(135deg, #ffffff, #fffbeb);
+  }
+  &.level-poor {
+    border-color: #ef4444;
+    background: linear-gradient(135deg, #ffffff, #fef2f2);
+  }
+}
+
+.score-ring-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-ring {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+
+.score-ring svg {
+  width: 100%;
+  height: 100%;
+}
+
+.score-circle {
+  transition: stroke-dasharray 1s ease;
+}
+
+.score-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.score-number {
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.level-excellent .score-number {
+  background: linear-gradient(135deg, #10b981, #059669);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.level-good .score-number {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.level-average .score-number {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.level-poor .score-number {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.overall-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.overall-level {
+  display: flex;
+  align-items: center;
+}
+
+.level-badge {
+  display: inline-block;
+  padding: 8px 20px;
+  border-radius: 30px;
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.level-excellent .level-badge {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.level-good .level-badge {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.level-average .level-badge {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.level-poor .level-badge {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.level-desc {
+  font-size: 15px;
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+.overall-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.stat-icon {
+  font-size: 24px;
+  transition: transform 0.3s ease;
+
+  &.warning {
+    animation: pulse 2s infinite;
+    color: #f59e0b;
+  }
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.assessment-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.detail-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.detail-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.detail-icon {
+  font-size: 28px;
+}
+
+.detail-title {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.detail-score-badge {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+
+  &.score-excellent {
+    background: linear-gradient(135deg, #10b981, #059669);
+  }
+  &.score-good {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+  }
+  &.score-average {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+  }
+  &.score-poor {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+  }
+}
+
+.detail-level-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.clarity-features {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.feature-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
+  &.active {
+    background: #dcfce7;
+    color: #16a34a;
+  }
+}
+
+.feature-icon {
+  font-size: 16px;
+}
+
+.subsection-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 16px 0 10px;
+}
+
+.item-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.highlight-item {
+  font-size: 13px;
+  color: #16a34a;
+  line-height: 1.6;
+}
+
+.issue-item {
+  font-size: 13px;
+  color: #dc2626;
+  line-height: 1.6;
+}
+
+.ingredient-progress {
+  margin-bottom: 20px;
+}
+
+.progress-bar-wrapper {
+  height: 12px;
+  background: #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill-ingredient {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #059669);
+  border-radius: 6px;
+  transition: width 0.8s ease;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.vague-section {
+  margin-bottom: 8px;
+}
+
+.vague-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vague-tag {
+  display: inline-block;
+  padding: 6px 12px;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.risk-section,
+.optimization-section {
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-color);
+}
+
+.risk-section-header,
+.optimization-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-subtitle {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.risk-count,
+.optimization-count {
+  padding: 4px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.risk-list,
+.optimization-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.risk-card {
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  border-left: 4px solid #e5e7eb;
+  background: var(--bg-tertiary);
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateX(4px);
+  }
+
+  &.risk-high {
+    background: #fef2f2;
+    border-left-color: #ef4444;
+  }
+
+  &.risk-medium {
+    background: #fffbeb;
+    border-left-color: #f59e0b;
+  }
+
+  &.risk-low {
+    background: #eff6ff;
+    border-left-color: #3b82f6;
+  }
+}
+
+.risk-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.risk-level-tag {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+
+  &.tag-high {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+  }
+
+  &.tag-medium {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+  }
+
+  &.tag-low {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+  }
+}
+
+.risk-category {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  background: white;
+  border-radius: 4px;
+}
+
+.risk-description {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.risk-suggestion {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+
+  .suggestion-label {
+    font-weight: 600;
+    color: #6366f1;
+  }
+}
+
+.optimization-card {
+  padding: 18px 20px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #fafbff, #f5f3ff);
+  border: 1px solid #e0e7ff;
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+  }
+}
+
+.optimization-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.priority-tag {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+
+  &.priority-high {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+  }
+
+  &.priority-medium {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+  }
+
+  &.priority-low {
+    background: linear-gradient(135deg, #10b981, #059669);
+  }
+}
+
+.optimization-category {
+  font-size: 12px;
+  color: #6366f1;
+  padding: 2px 8px;
+  background: white;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.optimization-description {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+@media (max-width: 1024px) {
+  .overall-score-card {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .assessment-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .empty-features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .operability-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .btn-assess {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .overall-score-card {
+    padding: 20px 16px;
+  }
+
+  .score-ring {
+    width: 160px;
+    height: 160px;
+  }
+
+  .score-number {
+    font-size: 40px;
+  }
+
+  .overall-stats {
+    gap: 10px;
+  }
+
+  .stat-item {
+    padding: 12px 8px;
+  }
+
+  .stat-value {
+    font-size: 18px;
+  }
+
+  .detail-card,
+  .risk-section,
+  .optimization-section {
+    padding: 20px 16px;
+  }
+
+  .level-badge {
+    font-size: 16px;
+    padding: 6px 16px;
+  }
+
+  .empty-features {
+    grid-template-columns: 1fr 1fr;
+    max-width: 320px;
+  }
+}
+
+@media (max-width: 480px) {
+  .overall-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .risk-card-header,
+  .optimization-card-header {
+    flex-wrap: wrap;
+    gap: 6px;
   }
 }
 </style>
