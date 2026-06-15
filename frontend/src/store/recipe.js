@@ -6,6 +6,8 @@ const STORAGE_KEY = 'recipe-timer-store'
 const TAGS_STORAGE_KEY = 'recipe-favorite-tags-store'
 const RECIPE_TAGS_STORAGE_KEY = 'recipe-favorite-recipe-tags-store'
 const SERVINGS_STORAGE_KEY = 'recipe-servings-store'
+const NUTRITION_GOALS_STORAGE_KEY = 'recipe-nutrition-goals-store'
+const KITCHEN_MODE_STORAGE_KEY = 'recipe-kitchen-mode-store'
 
 const loadTimersFromStorage = () => {
   try {
@@ -55,6 +57,34 @@ const loadServingsFromStorage = () => {
   return {}
 }
 
+const loadNutritionGoalsFromStorage = () => {
+  try {
+    const saved = localStorage.getItem(NUTRITION_GOALS_STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load nutrition goals from storage', e)
+  }
+  return {
+    calories: 2000,
+    protein: 60,
+    sodium: 2000
+  }
+}
+
+const loadKitchenModeFromStorage = () => {
+  try {
+    const saved = localStorage.getItem(KITCHEN_MODE_STORAGE_KEY)
+    if (saved) {
+      return JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load kitchen mode from storage', e)
+  }
+  return false
+}
+
 export const useRecipeStore = defineStore('recipe', () => {
   const recipes = ref([])
   const currentRecipe = ref(null)
@@ -71,6 +101,8 @@ export const useRecipeStore = defineStore('recipe', () => {
   const recipeTags = ref(loadRecipeTagsFromStorage())
   const servings = ref(loadServingsFromStorage())
   const originalServings = ref({})
+  const nutritionGoals = ref(loadNutritionGoalsFromStorage())
+  const kitchenMode = ref(loadKitchenModeFromStorage())
 
   const saveTimersToStorage = () => {
     try {
@@ -104,10 +136,28 @@ export const useRecipeStore = defineStore('recipe', () => {
     }
   }
 
+  const saveNutritionGoalsToStorage = () => {
+    try {
+      localStorage.setItem(NUTRITION_GOALS_STORAGE_KEY, JSON.stringify(nutritionGoals.value))
+    } catch (e) {
+      console.error('Failed to save nutrition goals to storage', e)
+    }
+  }
+
+  const saveKitchenModeToStorage = () => {
+    try {
+      localStorage.setItem(KITCHEN_MODE_STORAGE_KEY, JSON.stringify(kitchenMode.value))
+    } catch (e) {
+      console.error('Failed to save kitchen mode to storage', e)
+    }
+  }
+
   watch(timers, saveTimersToStorage, { deep: true })
   watch(tags, saveTagsToStorage, { deep: true })
   watch(recipeTags, saveRecipeTagsToStorage, { deep: true })
   watch(servings, saveServingsToStorage, { deep: true })
+  watch(nutritionGoals, saveNutritionGoalsToStorage, { deep: true })
+  watch(kitchenMode, saveKitchenModeToStorage, { deep: true })
 
   const getTimerState = (recipeId, stepIndex) => {
     const key = `${recipeId}-${stepIndex}`
@@ -162,6 +212,39 @@ export const useRecipeStore = defineStore('recipe', () => {
       servings.value[recipeId] = originalServings.value[recipeId]
       saveServingsToStorage()
     }
+  }
+
+  const getNutritionGoals = () => {
+    return { ...nutritionGoals.value }
+  }
+
+  const setNutritionGoals = (goals) => {
+    nutritionGoals.value = { ...nutritionGoals.value, ...goals }
+    saveNutritionGoalsToStorage()
+  }
+
+  const resetNutritionGoals = () => {
+    nutritionGoals.value = {
+      calories: 2000,
+      protein: 60,
+      sodium: 2000
+    }
+    saveNutritionGoalsToStorage()
+  }
+
+  const isKitchenMode = () => {
+    return kitchenMode.value
+  }
+
+  const setKitchenMode = (value) => {
+    kitchenMode.value = value
+    saveKitchenModeToStorage()
+  }
+
+  const toggleKitchenMode = () => {
+    kitchenMode.value = !kitchenMode.value
+    saveKitchenModeToStorage()
+    return kitchenMode.value
   }
 
   const getRecipeById = computed(() => (id) => {
@@ -379,6 +462,8 @@ export const useRecipeStore = defineStore('recipe', () => {
     recipeTags,
     servings,
     originalServings,
+    nutritionGoals,
+    kitchenMode,
     getRecipeById,
     isFavorite,
     setRecipes,
@@ -410,6 +495,12 @@ export const useRecipeStore = defineStore('recipe', () => {
     setServings,
     getOriginalServings,
     setOriginalServings,
-    resetServings
+    resetServings,
+    getNutritionGoals,
+    setNutritionGoals,
+    resetNutritionGoals,
+    isKitchenMode,
+    setKitchenMode,
+    toggleKitchenMode
   }
 })

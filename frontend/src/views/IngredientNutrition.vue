@@ -6,6 +6,97 @@
         <p class="page-desc">管理食材营养成分数据，用于自动计算食谱营养</p>
       </div>
 
+      <div class="nutrition-goals-card section-card">
+        <div class="goals-card-header">
+          <div>
+            <h2 class="goals-card-title">🎯 每日营养目标设置</h2>
+            <p class="goals-card-desc">设定您的每日营养摄入目标，用于查看食谱占比和超标提醒</p>
+          </div>
+          <button 
+            v-if="!showGoalsEditor"
+            class="btn btn-primary" 
+            @click="openGoalsEditor"
+          >
+            编辑目标
+          </button>
+          <div v-else class="editor-actions">
+            <button class="btn btn-outline" @click="cancelGoalsEdit">取消</button>
+            <button class="btn btn-outline reset-btn" @click="resetGoalsToDefault">恢复默认</button>
+            <button class="btn btn-primary" @click="saveGoals" :disabled="savingGoals">
+              {{ savingGoals ? '保存中...' : '保存' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!showGoalsEditor" class="goals-display">
+          <div class="goal-display-item calories">
+            <div class="goal-icon">🔥</div>
+            <div class="goal-info">
+              <div class="goal-value">{{ goalsDisplay.calories }}</div>
+              <div class="goal-unit">千卡/天</div>
+              <div class="goal-label">每日热量</div>
+            </div>
+          </div>
+          <div class="goal-display-item protein">
+            <div class="goal-icon">💪</div>
+            <div class="goal-info">
+              <div class="goal-value">{{ goalsDisplay.protein }}</div>
+              <div class="goal-unit">克/天</div>
+              <div class="goal-label">每日蛋白质</div>
+            </div>
+          </div>
+          <div class="goal-display-item sodium">
+            <div class="goal-icon">🧂</div>
+            <div class="goal-info">
+              <div class="goal-value">{{ goalsDisplay.sodium }}</div>
+              <div class="goal-unit">毫克/天</div>
+              <div class="goal-label">每日钠摄入</div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="goals-editor">
+          <div class="goals-editor-grid">
+            <div class="form-group editor-group">
+              <label>🔥 每日热量目标 (千卡)</label>
+              <input 
+                v-model.number="goalsEditForm.calories" 
+                type="number" 
+                min="500" 
+                max="8000" 
+                step="50"
+                placeholder="2000"
+              />
+              <div class="input-hint">推荐范围：女性 1500-2000，男性 2000-2500</div>
+            </div>
+            <div class="form-group editor-group">
+              <label>💪 每日蛋白质目标 (克)</label>
+              <input 
+                v-model.number="goalsEditForm.protein" 
+                type="number" 
+                min="10" 
+                max="300" 
+                step="5"
+                placeholder="60"
+              />
+              <div class="input-hint">推荐范围：每公斤体重 0.8-1.6 克蛋白质</div>
+            </div>
+            <div class="form-group editor-group">
+              <label>🧂 每日钠摄入目标 (毫克)</label>
+              <input 
+                v-model.number="goalsEditForm.sodium" 
+                type="number" 
+                min="200" 
+                max="6000" 
+                step="100"
+                placeholder="2000"
+              />
+              <div class="input-hint">WHO推荐：不超过 2000mg（约5克盐）</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="toolbar">
         <div class="search-bar">
           <input 
@@ -158,12 +249,82 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ingredientNutritionApi } from '@/utils/api'
+import { useRecipeStore } from '@/store/recipe'
+
+const store = useRecipeStore()
 
 const loading = ref(false)
 const submitting = ref(false)
+
+const showGoalsEditor = ref(false)
+const savingGoals = ref(false)
+const goalsEditForm = reactive({
+  calories: 2000,
+  protein: 60,
+  sodium: 2000
+})
+
+const goalsDisplay = computed(() => {
+  const goals = store.getNutritionGoals()
+  return {
+    calories: goals.calories || 2000,
+    protein: goals.protein || 60,
+    sodium: goals.sodium || 2000
+  }
+})
+
+const openGoalsEditor = () => {
+  const current = store.getNutritionGoals()
+  goalsEditForm.calories = current.calories || 2000
+  goalsEditForm.protein = current.protein || 60
+  goalsEditForm.sodium = current.sodium || 2000
+  showGoalsEditor.value = true
+}
+
+const cancelGoalsEdit = () => {
+  showGoalsEditor.value = false
+}
+
+const resetGoalsToDefault = () => {
+  goalsEditForm.calories = 2000
+  goalsEditForm.protein = 60
+  goalsEditForm.sodium = 2000
+  ElMessage.info('已恢复默认目标值')
+}
+
+const saveGoals = () => {
+  if (!goalsEditForm.calories || goalsEditForm.calories < 500 || goalsEditForm.calories > 8000) {
+    ElMessage.warning('请输入有效的热量目标 (500-8000千卡)')
+    return
+  }
+  if (!goalsEditForm.protein || goalsEditForm.protein < 10 || goalsEditForm.protein > 300) {
+    ElMessage.warning('请输入有效的蛋白质目标 (10-300克)')
+    return
+  }
+  if (!goalsEditForm.sodium || goalsEditForm.sodium < 200 || goalsEditForm.sodium > 6000) {
+    ElMessage.warning('请输入有效的钠摄入目标 (200-6000毫克)')
+    return
+  }
+
+  savingGoals.value = true
+  try {
+    store.setNutritionGoals({
+      calories: goalsEditForm.calories,
+      protein: goalsEditForm.protein,
+      sodium: goalsEditForm.sodium
+    })
+    ElMessage.success('营养目标保存成功！')
+    showGoalsEditor.value = false
+  } catch (err) {
+    console.error('保存目标失败', err)
+    ElMessage.error('保存失败，请稍后重试')
+  } finally {
+    savingGoals.value = false
+  }
+}
 const nutritionList = ref([])
 const categories = ref([])
 const total = ref(0)
@@ -686,6 +847,314 @@ onMounted(() => {
 
   .modal-body {
     padding: 16px;
+  }
+}
+
+.section-card {
+  background: white;
+  border-radius: var(--radius-md);
+  padding: 28px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.nutrition-goals-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+  border: 1px solid #bbf7d0;
+}
+
+.goals-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.goals-card-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  color: var(--text-primary);
+}
+
+.goals-card-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reset-btn {
+  &:hover {
+    border-color: #f59e0b !important;
+    color: #f59e0b !important;
+  }
+}
+
+.goals-display {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.goal-display-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 16px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  }
+
+  &.calories {
+    background: linear-gradient(135deg, #fef2f2, #fee2e2);
+    border: 1px solid #fecaca;
+  }
+
+  &.protein {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border: 1px solid #bfdbfe;
+  }
+
+  &.sodium {
+    background: linear-gradient(135deg, #f0fdfa, #ccfbf1);
+    border: 1px solid #99f6e4;
+  }
+}
+
+.goal-icon {
+  font-size: 48px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.goal-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.goal-value {
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text-primary);
+
+  .calories & {
+    color: #dc2626;
+  }
+
+  .protein & {
+    color: #2563eb;
+  }
+
+  .sodium & {
+    color: #0d9488;
+  }
+}
+
+.goal-unit {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.goal-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 4px;
+}
+
+.goals-editor {
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.goals-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.editor-group {
+  margin-bottom: 0;
+
+  label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+
+  input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 18px;
+    font-weight: 600;
+    outline: none;
+    transition: all 0.3s ease;
+    font-family: inherit;
+
+    &:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 4px rgba(230, 126, 34, 0.1);
+    }
+  }
+}
+
+.input-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-light);
+  line-height: 1.5;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+  color: white;
+  border: none;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(230, 126, 34, 0.3);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.btn-outline {
+  background: white;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+
+  &:hover:not(:disabled) {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@media (max-width: 768px) {
+  .nutrition-goals-card {
+    padding: 20px 16px;
+    margin-bottom: 20px;
+  }
+
+  .goals-card-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .editor-actions {
+    width: 100%;
+
+    .btn {
+      flex: 1;
+    }
+  }
+
+  .goals-display {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .goal-display-item {
+    padding: 18px 20px;
+  }
+
+  .goal-icon {
+    font-size: 40px;
+  }
+
+  .goal-value {
+    font-size: 30px;
+  }
+
+  .goals-editor-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .editor-group {
+    input {
+      padding: 12px 14px;
+      font-size: 16px;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .section-card {
+    padding: 16px 14px;
+  }
+
+  .goals-card-title {
+    font-size: 18px;
+  }
+
+  .goals-card-desc {
+    font-size: 13px;
+  }
+
+  .goal-display-item {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .goal-icon {
+    font-size: 36px;
+  }
+
+  .goal-value {
+    font-size: 26px;
   }
 }
 </style>

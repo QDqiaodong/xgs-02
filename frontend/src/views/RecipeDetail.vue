@@ -91,6 +91,17 @@
               </svg>
               打印
             </button>
+            <button 
+              class="btn btn-kitchen-mode" 
+              :class="{ active: kitchenModeEnabled }"
+              @click="toggleKitchenMode"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+              {{ kitchenModeEnabled ? '退出大字模式' : '厨房大字模式' }}
+            </button>
           </div>
         </div>
         
@@ -216,13 +227,22 @@
           
           <div v-else-if="nutritionData" class="nutrition-content">
             <div class="nutrition-summary">
-              <div class="nutrition-item calories">
+              <div class="nutrition-item calories" :class="{ 'over-limit': isOverLimit('calories') }">
                 <div class="nutrition-value">{{ nutritionData.totalCalories || 0 }}</div>
                 <div class="nutrition-label">热量 (千卡)</div>
+                <div v-if="nutritionGoals" class="nutrition-goal-bar">
+                  <div class="goal-progress" :style="{ width: getGoalPercent('calories') + '%' }"></div>
+                  <span class="goal-text">{{ getGoalPercent('calories') }}% / 每日目标</span>
+                </div>
+                <div v-if="isOverLimit('calories')" class="over-warning">⚠️ 已超标</div>
               </div>
-              <div class="nutrition-item protein">
+              <div class="nutrition-item protein" :class="{ 'over-limit': isOverLimit('protein') }">
                 <div class="nutrition-value">{{ nutritionData.totalProtein || 0 }}g</div>
                 <div class="nutrition-label">蛋白质</div>
+                <div v-if="nutritionGoals" class="nutrition-goal-bar">
+                  <div class="goal-progress protein-progress" :style="{ width: Math.min(getGoalPercent('protein'), 100) + '%' }"></div>
+                  <span class="goal-text">{{ getGoalPercent('protein') }}% / 每日目标</span>
+                </div>
               </div>
               <div class="nutrition-item fat">
                 <div class="nutrition-value">{{ nutritionData.totalFat || 0 }}g</div>
@@ -236,9 +256,26 @@
                 <div class="nutrition-value">{{ nutritionData.totalFiber || 0 }}g</div>
                 <div class="nutrition-label">膳食纤维</div>
               </div>
-              <div class="nutrition-item sodium">
+              <div class="nutrition-item sodium" :class="{ 'over-limit': isOverLimit('sodium') }">
                 <div class="nutrition-value">{{ nutritionData.totalSodium || 0 }}mg</div>
                 <div class="nutrition-label">钠</div>
+                <div v-if="nutritionGoals" class="nutrition-goal-bar">
+                  <div class="goal-progress sodium-progress" :style="{ width: getGoalPercent('sodium') + '%' }"></div>
+                  <span class="goal-text">{{ getGoalPercent('sodium') }}% / 每日目标</span>
+                </div>
+                <div v-if="isOverLimit('sodium')" class="over-warning">⚠️ 已超标</div>
+              </div>
+            </div>
+
+            <div v-if="nutritionGoals" class="nutrition-goals-info">
+              <div class="goals-header">
+                <span class="goals-title">🎯 每日营养目标</span>
+                <span class="goals-link" @click="goToNutritionPage">前往设置 →</span>
+              </div>
+              <div class="goals-list">
+                <span>热量: {{ nutritionGoals.calories }}千卡</span>
+                <span>蛋白质: {{ nutritionGoals.protein }}g</span>
+                <span>钠: {{ nutritionGoals.sodium }}mg</span>
               </div>
             </div>
             
@@ -254,9 +291,13 @@
           </div>
         </div>
 
-        <div class="steps-section section-card">
-          <h2 class="section-title">👨‍🍳 烹饪步骤</h2>
-          <div class="steps-list">
+        <div class="steps-section section-card" :class="{ 'kitchen-mode': kitchenModeEnabled }">
+          <div class="steps-header-row">
+            <h2 class="section-title">👨‍🍳 烹饪步骤</h2>
+            <span v-if="kitchenModeEnabled" class="kitchen-mode-badge">大字模式</span>
+          </div>
+          
+          <div v-if="!kitchenModeEnabled" class="steps-list">
             <div v-for="(step, index) in recipe.steps" :key="index" class="step-item">
               <div class="step-header">
                 <div class="step-number">{{ index + 1 }}</div>
@@ -282,6 +323,90 @@
                 </div>
                 <p class="step-text">{{ step.content }}</p>
               </div>
+            </div>
+          </div>
+
+          <div v-else class="kitchen-steps-viewer">
+            <div class="kitchen-steps-progress">
+              <div class="progress-bar">
+                <div 
+                  class="progress-fill" 
+                  :style="{ width: ((currentStepIndex + 1) / recipe.steps.length * 100) + '%' }"
+                ></div>
+              </div>
+              <div class="progress-text">
+                步骤 {{ currentStepIndex + 1 }} / {{ recipe.steps.length }}
+              </div>
+            </div>
+
+            <div class="kitchen-step-card" @click="noop">
+              <div class="kitchen-step-number">
+                <span class="step-num">{{ currentStepIndex + 1 }}</span>
+                <span class="step-total">/ {{ recipe.steps.length }}</span>
+              </div>
+
+              <div v-if="currentStepTime > 0" class="kitchen-step-time">
+                <span class="time-icon">⏱️</span>
+                <span class="time-text">建议用时：{{ currentStepTime }} 分钟</span>
+              </div>
+
+              <div class="kitchen-step-content">
+                <p class="kitchen-step-text">{{ currentStep?.content }}</p>
+              </div>
+
+              <div v-if="currentStepIngredients.length > 0" class="kitchen-step-ingredients">
+                <div class="ingredients-label">🥬 关键食材</div>
+                <div class="ingredients-tags">
+                  <span 
+                    v-for="(ing, idx) in currentStepIngredients" 
+                    :key="idx" 
+                    class="ingredient-tag"
+                  >{{ ing }}</span>
+                </div>
+              </div>
+
+              <div v-if="currentStep?.image" class="kitchen-step-image">
+                <img 
+                  :src="currentStep.image" 
+                  :alt="'步骤' + (currentStepIndex + 1)" 
+                  @error="handleStepImageError"
+                />
+              </div>
+            </div>
+
+            <div class="kitchen-steps-nav no-print" @click="noop">
+              <button 
+                class="nav-step-btn prev-btn"
+                :disabled="currentStepIndex === 0"
+                @click.stop="prevStep"
+                @touchstart.prevent="prevStep"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+                <span>上一步</span>
+              </button>
+              <button 
+                class="nav-step-btn next-btn"
+                :disabled="currentStepIndex >= recipe.steps.length - 1"
+                @click.stop="nextStep"
+                @touchstart.prevent="nextStep"
+              >
+                <span>下一步</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="kitchen-steps-dots no-print" @click="noop">
+              <button 
+                v-for="(step, idx) in recipe.steps" 
+                :key="idx"
+                class="step-dot"
+                :class="{ active: idx === currentStepIndex, done: idx < currentStepIndex }"
+                @click.stop="goToStep(idx)"
+              ></button>
             </div>
           </div>
         </div>
@@ -375,7 +500,7 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useRecipeStore } from '@/store/recipe'
 import StepTimer from '@/components/StepTimer.vue'
@@ -384,6 +509,7 @@ import StarRating from '@/components/StarRating.vue'
 import { recipeApi, ingredientNutritionApi, shoppingListApi, ratingApi, posterApi } from '@/utils/api'
 
 const route = useRoute()
+const router = useRouter()
 const store = useRecipeStore()
 
 const recipe = ref(null)
@@ -403,8 +529,13 @@ const showShareModal = ref(false)
 const posterImageUrl = ref('')
 const loadingPoster = ref(false)
 
+const kitchenModeEnabled = ref(store.isKitchenMode())
+const currentStepIndex = ref(0)
+
 const minServings = 1
 const maxServings = 20
+
+const nutritionGoals = computed(() => store.getNutritionGoals())
 
 const originalServings = computed(() => store.getOriginalServings(route.params.id) || 1)
 const currentServings = computed({
@@ -843,6 +974,103 @@ const handleImageError = (e) => {
 const handleStepImageError = (e) => {
   e.target.style.display = 'none'
 }
+
+const toggleKitchenMode = () => {
+  const newValue = store.toggleKitchenMode()
+  kitchenModeEnabled.value = newValue
+  if (newValue) {
+    currentStepIndex.value = 0
+    ElMessage.success('已进入厨房大字模式')
+  } else {
+    ElMessage.info('已退出厨房大字模式')
+  }
+}
+
+const noop = () => {}
+
+const currentStep = computed(() => {
+  if (!recipe.value?.steps || recipe.value.steps.length === 0) return null
+  return recipe.value.steps[currentStepIndex.value] || null
+})
+
+const currentStepTime = computed(() => {
+  if (!currentStep.value) return 0
+  return getDefaultStepTime(currentStepIndex.value, currentStep.value)
+})
+
+const extractIngredientsFromText = (text) => {
+  if (!text || !recipe.value?.ingredients) return []
+  const ingredientNames = recipe.value.ingredients.map(ing => ing.name)
+  const found = []
+  ingredientNames.forEach(name => {
+    if (name && text.includes(name) && !found.includes(name)) {
+      found.push(name)
+    }
+  })
+  return found.slice(0, 6)
+}
+
+const currentStepIngredients = computed(() => {
+  if (!currentStep.value?.content) return []
+  return extractIngredientsFromText(currentStep.value.content)
+})
+
+const prevStep = () => {
+  if (currentStepIndex.value > 0) {
+    currentStepIndex.value--
+  }
+}
+
+const nextStep = () => {
+  if (currentStepIndex.value < recipe.value.steps.length - 1) {
+    currentStepIndex.value++
+  } else {
+    ElMessage.success('🎉 恭喜完成所有步骤！')
+  }
+}
+
+const goToStep = (idx) => {
+  if (idx >= 0 && idx < recipe.value.steps.length) {
+    currentStepIndex.value = idx
+  }
+}
+
+const getGoalPercent = (type) => {
+  if (!nutritionData.value || !nutritionGoals.value) return 0
+  const goals = nutritionGoals.value
+  let value = 0
+  let goal = 0
+  switch (type) {
+    case 'calories':
+      value = parseFloat(nutritionData.value.totalCalories) || 0
+      goal = goals.calories || 2000
+      break
+    case 'protein':
+      value = parseFloat(nutritionData.value.totalProtein) || 0
+      goal = goals.protein || 60
+      break
+    case 'sodium':
+      value = parseFloat(nutritionData.value.totalSodium) || 0
+      goal = goals.sodium || 2000
+      break
+    default:
+      return 0
+  }
+  if (goal <= 0) return 0
+  return Math.round((value / goal) * 100)
+}
+
+const isOverLimit = (type) => {
+  return getGoalPercent(type) > 100
+}
+
+const goToNutritionPage = () => {
+  router.push('/ingredient-nutrition')
+}
+
+watch(kitchenModeEnabled, (val) => {
+  store.setKitchenMode(val)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -2102,6 +2330,550 @@ const handleStepImageError = (e) => {
     .share-modal-footer {
       padding: 16px 20px;
       padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+}
+
+.btn-kitchen-mode {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  font-weight: 500;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  }
+
+  &.active {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+
+    &:hover {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+  }
+}
+
+.steps-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+
+  .section-title {
+    margin-bottom: 0;
+  }
+}
+
+.kitchen-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.steps-section.kitchen-mode {
+  background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+  border: 2px solid #10b981;
+}
+
+.kitchen-steps-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.kitchen-steps-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  .progress-bar {
+    height: 10px;
+    background: #d1fae5;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #059669);
+    border-radius: 5px;
+    transition: width 0.4s ease;
+  }
+
+  .progress-text {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: #059669;
+  }
+}
+
+.kitchen-step-card {
+  background: white;
+  border-radius: 20px;
+  padding: 36px;
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  user-select: none;
+}
+
+.kitchen-step-number {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+
+  .step-num {
+    font-size: 72px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #10b981, #059669);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+  }
+
+  .step-total {
+    font-size: 24px;
+    font-weight: 500;
+    color: #9ca3af;
+  }
+}
+
+.kitchen-step-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-radius: 12px;
+  align-self: flex-start;
+
+  .time-icon {
+    font-size: 28px;
+  }
+
+  .time-text {
+    font-size: 22px;
+    font-weight: 600;
+    color: #92400e;
+  }
+}
+
+.kitchen-step-content {
+  .kitchen-step-text {
+    font-size: 28px;
+    line-height: 1.7;
+    color: #111827;
+    font-weight: 500;
+    margin: 0;
+  }
+}
+
+.kitchen-step-ingredients {
+  .ingredients-label {
+    font-size: 18px;
+    font-weight: 600;
+    color: #059669;
+    margin-bottom: 12px;
+  }
+
+  .ingredients-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .ingredient-tag {
+    display: inline-block;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    color: #065f46;
+    border-radius: 30px;
+    font-size: 18px;
+    font-weight: 500;
+  }
+}
+
+.kitchen-step-image {
+  margin-top: 8px;
+
+  img {
+    width: 100%;
+    max-height: 400px;
+    object-fit: cover;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.kitchen-steps-nav {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.nav-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 40px;
+  border: none;
+  border-radius: 16px;
+  font-size: 22px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-height: 72px;
+
+  svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  &.prev-btn {
+    background: #e5e7eb;
+    color: #374151;
+
+    &:hover:not(:disabled) {
+      background: #d1d5db;
+    }
+  }
+
+  &.next-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+
+    &:hover:not(:disabled) {
+      background: linear-gradient(135deg, #059669, #047857);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.4);
+    }
+  }
+}
+
+.kitchen-steps-dots {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.step-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #10b981;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+
+  &.done {
+    background: #6ee7b7;
+    border-color: #6ee7b7;
+  }
+
+  &.active {
+    background: #10b981;
+    border-color: #10b981;
+    transform: scale(1.3);
+  }
+
+  &:hover {
+    transform: scale(1.2);
+  }
+}
+
+.nutrition-item {
+  position: relative;
+
+  &.over-limit {
+    background: linear-gradient(135deg, #fef2f2, #fee2e2) !important;
+    border: 2px solid #ef4444;
+    animation: shake 0.5s ease;
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.nutrition-goal-bar {
+  margin-top: 14px;
+  position: relative;
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 5px;
+  overflow: visible;
+
+  .goal-progress {
+    height: 100%;
+    background: linear-gradient(90deg, #e74c3c, #ef4444);
+    border-radius: 5px;
+    transition: width 0.6s ease;
+  }
+
+  .protein-progress {
+    background: linear-gradient(90deg, #3498db, #2980b9);
+  }
+
+  .sodium-progress {
+    background: linear-gradient(90deg, #1abc9c, #16a085);
+  }
+
+  .goal-text {
+    position: absolute;
+    top: 14px;
+    left: 0;
+    right: 0;
+    font-size: 12px;
+    color: #6b7280;
+    text-align: center;
+  }
+}
+
+.over-warning {
+  margin-top: 22px;
+  padding: 8px 12px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.nutrition-goals-info {
+  margin-top: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  border-radius: var(--radius-md);
+  border: 1px solid #bfdbfe;
+
+  .goals-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .goals-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1e40af;
+  }
+
+  .goals-link {
+    font-size: 13px;
+    color: #2563eb;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.2s;
+
+    &:hover {
+      color: #1d4ed8;
+      text-decoration: underline;
+    }
+  }
+
+  .goals-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+
+    span {
+      font-size: 13px;
+      color: #4b5563;
+      padding: 4px 12px;
+      background: white;
+      border-radius: 20px;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .steps-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .kitchen-mode-badge {
+    font-size: 12px;
+    padding: 4px 12px;
+  }
+
+  .kitchen-step-card {
+    padding: 24px 20px;
+    gap: 20px;
+    border-radius: 16px;
+  }
+
+  .kitchen-step-number {
+    .step-num {
+      font-size: 56px;
+    }
+
+    .step-total {
+      font-size: 18px;
+    }
+  }
+
+  .kitchen-step-time {
+    padding: 10px 18px;
+
+    .time-icon {
+      font-size: 22px;
+    }
+
+    .time-text {
+      font-size: 17px;
+    }
+  }
+
+  .kitchen-step-content {
+    .kitchen-step-text {
+      font-size: 20px;
+    }
+  }
+
+  .kitchen-step-ingredients {
+    .ingredients-label {
+      font-size: 15px;
+    }
+
+    .ingredient-tag {
+      font-size: 14px;
+      padding: 7px 14px;
+    }
+  }
+
+  .kitchen-step-image {
+    img {
+      max-height: 260px;
+    }
+  }
+
+  .kitchen-steps-nav {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .nav-step-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 16px 24px;
+    font-size: 17px;
+    min-height: 56px;
+
+    svg {
+      width: 22px;
+      height: 22px;
+    }
+  }
+
+  .step-dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .nutrition-item {
+    padding-bottom: 36px !important;
+  }
+
+  .nutrition-goal-bar {
+    margin-top: 12px;
+
+    .goal-text {
+      font-size: 11px;
+    }
+  }
+
+  .over-warning {
+    font-size: 11px;
+    padding: 6px 8px;
+  }
+
+  .nutrition-goals-info {
+    padding: 16px;
+    margin-top: 20px;
+
+    .goals-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .goals-list {
+      gap: 8px;
+
+      span {
+        font-size: 12px;
+        padding: 3px 10px;
+      }
+    }
+  }
+
+  .btn-kitchen-mode {
+    order: 10;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .kitchen-step-card {
+    padding: 20px 16px;
+  }
+
+  .kitchen-step-number {
+    .step-num {
+      font-size: 48px;
+    }
+
+    .step-total {
+      font-size: 16px;
+    }
+  }
+
+  .kitchen-step-content {
+    .kitchen-step-text {
+      font-size: 18px;
+    }
+  }
+
+  .kitchen-step-ingredients {
+    .ingredient-tag {
+      font-size: 13px;
+      padding: 6px 12px;
     }
   }
 }
